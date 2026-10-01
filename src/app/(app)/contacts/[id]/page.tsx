@@ -9,12 +9,16 @@ import { PageHeader } from "@/components/page-header";
 import { RoleBadges } from "@/components/contact-badges";
 import { ContactActions } from "@/components/contact-actions";
 import { ConfirmButton } from "@/components/confirm-button";
+import { TaskDialog } from "@/components/tasks/task-dialog";
+import { TaskList } from "@/components/tasks/task-list";
 import { StatusBadge } from "@/components/property-badges";
 import { MatchList } from "@/components/match-list";
 import { CONTACT_SOURCES } from "@/lib/constants";
 import { formatEuros, formatPhone, fullName } from "@/lib/format";
 import { propertyTitle } from "@/lib/property";
 import { matchesForBuyer } from "@/lib/queries/matches";
+import { getLinkOptions } from "@/lib/queries/link-options";
+import { tasksFor } from "@/lib/queries/tasks";
 import { requireUser } from "@/lib/supabase/server";
 import type { BuyerProfile, Contact, Interaction, Property, Visit } from "@/lib/types";
 import { deleteContact } from "../actions";
@@ -34,7 +38,7 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
   const { id } = await params;
   const { supabase } = await requireUser();
 
-  const [{ data: contact }, { data: buyer }, { data: interactions }, { data: visits }, { data: properties }, matches] = await Promise.all([
+  const [{ data: contact }, { data: buyer }, { data: interactions }, { data: visits }, { data: properties }, matches, tasks, links] = await Promise.all([
     supabase.from("contacts").select("*").eq("id", id).maybeSingle<Contact>(),
     supabase.from("buyer_profiles").select("*").eq("contact_id", id).maybeSingle<BuyerProfile>(),
     supabase.from("interactions").select("*").eq("contact_id", id).order("occurred_at", { ascending: false }).returns<Interaction[]>(),
@@ -45,6 +49,8 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
       .returns<(Visit & { property: Pick<Property, "type" | "rooms" | "surface" | "city"> })[]>(),
     supabase.from("properties").select("*").eq("seller_contact_id", id).order("updated_at", { ascending: false }).returns<Property[]>(),
     matchesForBuyer(supabase, id),
+    tasksFor(supabase, { contactId: id }),
+    getLinkOptions(supabase),
   ]);
   if (!contact) notFound();
 
@@ -198,7 +204,22 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
           )}
         </div>
 
-        <Card className="content-start">
+        <div className="grid content-start gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Tâches</CardTitle>
+            <TaskDialog contacts={links.contacts} properties={links.properties} defaultContactId={contact.id} />
+          </CardHeader>
+          <CardContent>
+            {tasks.length ? (
+              <TaskList tasks={tasks} contacts={links.contacts} properties={links.properties} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Aucune tâche liée à ce contact.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader>
             <CardTitle>Échanges</CardTitle>
             <InteractionDialog contactId={contact.id} />
@@ -207,6 +228,7 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
             <Timeline contactId={contact.id} items={timeline} />
           </CardContent>
         </Card>
+        </div>
       </div>
     </>
   );

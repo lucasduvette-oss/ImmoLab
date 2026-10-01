@@ -84,6 +84,9 @@ begin
     (c_karim, v_user, 'Karim', 'Haddad', '06 39 98 10 12', 'karim.haddad@exemple.fr', null, '44000', 'Nantes', 'autre',
       '{partenaire}', 'courtier', null, null, 'Courtier en crédit immobilier.');
 
+  -- Contacts saisis il y a 3 mois (pour que la relance « 30 jours sans contact » soit visible).
+  update public.contacts set created_at = now() - interval '90 days' where user_id = v_user;
+
   -- -------------------------------------------------------------------
   -- Qualification et critères des acquéreurs
   -- -------------------------------------------------------------------

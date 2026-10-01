@@ -128,3 +128,16 @@ export type Visit = {
   feedback: string | null;
   feedback_sent_at: string | null;
 };
+
+export type Task = {
+  id: string;
+  user_id: string;
+  title: string;
+  notes: string | null;
+  due_date: string;
+  contact_id: string | null;
+  property_id: string | null;
+  done_at: string | null;
+  suggestion_key: string | null;
+  created_at: string;
+};

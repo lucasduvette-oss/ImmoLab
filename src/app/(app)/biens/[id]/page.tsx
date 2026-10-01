@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { ConfirmButton } from "@/components/confirm-button";
+import { TaskDialog } from "@/components/tasks/task-dialog";
+import { TaskList } from "@/components/tasks/task-list";
 import { ActionButton } from "@/components/action-button";
 import { ContactActions } from "@/components/contact-actions";
 import { MatchList } from "@/components/match-list";
@@ -18,6 +20,8 @@ import { mandateAlert, mandateAlertText, propertyAddress, propertyTitle } from "
 import { listContactOptions } from "@/lib/queries/contacts";
 import { matchesForProperty } from "@/lib/queries/matches";
 import { signPhotoUrls } from "@/lib/queries/properties";
+import { getLinkOptions } from "@/lib/queries/link-options";
+import { tasksFor } from "@/lib/queries/tasks";
 import { requireUser } from "@/lib/supabase/server";
 import type { Contact, Property, PropertyPhoto, Visit } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -48,7 +52,7 @@ export default async function PropertyPage({ params }: PageProps<"/biens/[id]">)
   const { id } = await params;
   const { supabase, userId } = await requireUser();
 
-  const [{ data: property }, { data: photos }, { data: visits }, buyers, matches] = await Promise.all([
+  const [{ data: property }, { data: photos }, { data: visits }, buyers, matches, tasks, links] = await Promise.all([
     supabase.from("properties").select("*").eq("id", id).maybeSingle<Property>(),
     supabase.from("property_photos").select("*").eq("property_id", id).order("position").order("created_at").returns<PropertyPhoto[]>(),
     supabase
@@ -59,6 +63,8 @@ export default async function PropertyPage({ params }: PageProps<"/biens/[id]">)
       .returns<(Visit & { buyer: Pick<Contact, "id" | "first_name" | "last_name"> | null })[]>(),
     listContactOptions(supabase, "acquereur"),
     matchesForProperty(supabase, id),
+    tasksFor(supabase, { propertyId: id }),
+    getLinkOptions(supabase),
   ]);
   if (!property) notFound();
 
@@ -268,6 +274,20 @@ export default async function PropertyPage({ params }: PageProps<"/biens/[id]">)
                     Choisir un vendeur
                   </Link>
                 </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Tâches</CardTitle>
+              <TaskDialog contacts={links.contacts} properties={links.properties} defaultPropertyId={property.id} />
+            </CardHeader>
+            <CardContent>
+              {tasks.length ? (
+                <TaskList tasks={tasks} contacts={links.contacts} properties={links.properties} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucune tâche liée à ce bien.</p>
               )}
             </CardContent>
           </Card>
