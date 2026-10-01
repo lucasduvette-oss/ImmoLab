@@ -10,9 +10,11 @@ import { RoleBadges } from "@/components/contact-badges";
 import { ContactActions } from "@/components/contact-actions";
 import { ConfirmButton } from "@/components/confirm-button";
 import { StatusBadge } from "@/components/property-badges";
+import { MatchList } from "@/components/match-list";
 import { CONTACT_SOURCES } from "@/lib/constants";
 import { formatEuros, formatPhone, fullName } from "@/lib/format";
 import { propertyTitle } from "@/lib/property";
+import { matchesForBuyer } from "@/lib/queries/matches";
 import { requireUser } from "@/lib/supabase/server";
 import type { BuyerProfile, Contact, Interaction, Property, Visit } from "@/lib/types";
 import { deleteContact } from "../actions";
@@ -32,7 +34,7 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
   const { id } = await params;
   const { supabase } = await requireUser();
 
-  const [{ data: contact }, { data: buyer }, { data: interactions }, { data: visits }, { data: properties }] = await Promise.all([
+  const [{ data: contact }, { data: buyer }, { data: interactions }, { data: visits }, { data: properties }, matches] = await Promise.all([
     supabase.from("contacts").select("*").eq("id", id).maybeSingle<Contact>(),
     supabase.from("buyer_profiles").select("*").eq("contact_id", id).maybeSingle<BuyerProfile>(),
     supabase.from("interactions").select("*").eq("contact_id", id).order("occurred_at", { ascending: false }).returns<Interaction[]>(),
@@ -42,6 +44,7 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
       .eq("buyer_contact_id", id)
       .returns<(Visit & { property: Pick<Property, "type" | "rooms" | "surface" | "city"> })[]>(),
     supabase.from("properties").select("*").eq("seller_contact_id", id).order("updated_at", { ascending: false }).returns<Property[]>(),
+    matchesForBuyer(supabase, id),
   ]);
   if (!contact) notFound();
 
@@ -170,6 +173,25 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
                   <BuyerSummary profile={buyer} />
                 ) : (
                   <p className="text-sm text-muted-foreground">Qualification et critères de recherche non renseignés.</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {isBuyer && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BuildingIcon className="size-4" /> Biens compatibles ({matches.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {matches.length ? (
+                  <MatchList matches={matches} show="property" />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {buyer ? "Aucun bien ne correspond pour l'instant." : "Renseignez le projet d'achat pour trouver des biens compatibles."}
+                  </p>
                 )}
               </CardContent>
             </Card>

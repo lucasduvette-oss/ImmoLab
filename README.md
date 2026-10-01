@@ -40,6 +40,7 @@ biens suivis, rapprochement biens / acquéreurs, relances, et estimations basée
 | Photos | Ajout depuis l'appareil photo ou la galerie du téléphone (photos réduites automatiquement), photo principale, stockage privé |
 | Mandat | Type, dates, honoraires, alerte 30 jours avant l'échéance |
 | Visites | Date, acquéreur, retour de visite (note sur 5 + avis), suivi de la transmission au vendeur |
+| Rapprochement | Score de correspondance bien / acquéreur (sur 100) recalculé automatiquement, listes « acquéreurs compatibles » et « biens compatibles », notification des nouvelles correspondances |
 
 *(La liste s'enrichit à chaque étape du développement.)*
 
@@ -219,6 +220,27 @@ Avec les données de démonstration chargées (section 5) :
 7. Ouvrez la fiche du vendeur **Jean-Luc Bernard** : le bloc **Biens en vente** liste ses biens. Sur la fiche de
    **Camille Robin**, la visite de la maison de Rezé apparaît dans la timeline.
 
+### Étape 4 — Rapprochement biens / acquéreurs
+
+**Comment le score est calculé** (sur 100) :
+- critères **éliminatoires** : type de bien recherché, ville ou code postal recherchés, prix au plus 10 % au-dessus du budget ;
+- **pénalités** : prix au-dessus du budget (jusqu'à −25), surface sous le minimum (−2 par % manquant, max −40),
+  pièces manquantes (−15 par pièce), critère indispensable absent (−20 chacun) ;
+- seules les correspondances d'au moins **50/100** sont affichées ;
+- seuls les biens **en estimation ou en vente** et les acquéreurs **ni « acheté » ni « perdu »** sont rapprochés.
+
+Le calcul est fait automatiquement par la base de données à chaque modification d'un bien, d'une recherche ou d'un contact.
+
+1. Avec les données de démonstration, une pastille rouge apparaît sur **Correspondances** (menu latéral) ou sur **Plus**
+   (téléphone) : 9 nouvelles correspondances.
+2. Ouvrez **Correspondances** : chaque ligne montre le score, le bien, l'acquéreur et le détail des critères
+   (✓ respecté, ✗ non respecté, ? non renseigné).
+3. Fiche de **Thomas Petit** : le bloc **Biens compatibles** liste 3 biens. Cliquez sur **Modifier** (projet d'achat),
+   passez le budget à `350000` et enregistrez : un 4ᵉ bien (rue Kervégan) apparaît, marqué **Nouveau**.
+4. Fiche de la **maison de Rezé** : le bloc **Acquéreurs compatibles** montre Camille Robin (100/100).
+5. Passez un acquéreur à l'étape **Perdu** (sur sa fiche) : ses correspondances disparaissent.
+6. Sur **Correspondances**, **Tout marquer comme vu** : la pastille de notification disparaît.
+
 ---
 
 ## 7. Travailler sur le code en local (facultatif)
@@ -297,6 +319,7 @@ src/
     format.ts          mise en forme française (euros, dates, téléphones)
     geocoding.ts       adresse → coordonnées GPS (Géoplateforme IGN)
     property.ts        titre d'un bien, alerte d'échéance du mandat
+    matching.ts        libellés des critères de correspondance (le calcul est en SQL)
   proxy.ts             protège les pages privées (redirige vers /connexion)
 supabase/
   migrations/          création des tables et des règles de sécurité (SQL)

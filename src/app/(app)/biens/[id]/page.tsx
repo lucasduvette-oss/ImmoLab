@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangleIcon, MapPinIcon, PencilIcon, SendIcon, Trash2Icon } from "lucide-react";
+import { AlertTriangleIcon, MapPinIcon, PencilIcon, SendIcon, Trash2Icon, UsersIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,12 +9,14 @@ import { PageHeader } from "@/components/page-header";
 import { ConfirmButton } from "@/components/confirm-button";
 import { ActionButton } from "@/components/action-button";
 import { ContactActions } from "@/components/contact-actions";
+import { MatchList } from "@/components/match-list";
 import { StatusBadge } from "@/components/property-badges";
 import { Stars } from "@/components/stars";
 import { MANDATE_TYPES, OUTDOOR_TYPES, PARKING_TYPES, PROPERTY_CONDITIONS } from "@/lib/constants";
 import { formatDate, formatDateTime, formatEuros, formatNumber, formatSurface, fullName } from "@/lib/format";
 import { mandateAlert, mandateAlertText, propertyAddress, propertyTitle } from "@/lib/property";
 import { listContactOptions } from "@/lib/queries/contacts";
+import { matchesForProperty } from "@/lib/queries/matches";
 import { signPhotoUrls } from "@/lib/queries/properties";
 import { requireUser } from "@/lib/supabase/server";
 import type { Contact, Property, PropertyPhoto, Visit } from "@/lib/types";
@@ -46,7 +48,7 @@ export default async function PropertyPage({ params }: PageProps<"/biens/[id]">)
   const { id } = await params;
   const { supabase, userId } = await requireUser();
 
-  const [{ data: property }, { data: photos }, { data: visits }, buyers] = await Promise.all([
+  const [{ data: property }, { data: photos }, { data: visits }, buyers, matches] = await Promise.all([
     supabase.from("properties").select("*").eq("id", id).maybeSingle<Property>(),
     supabase.from("property_photos").select("*").eq("property_id", id).order("position").order("created_at").returns<PropertyPhoto[]>(),
     supabase
@@ -56,6 +58,7 @@ export default async function PropertyPage({ params }: PageProps<"/biens/[id]">)
       .order("visited_at", { ascending: false })
       .returns<(Visit & { buyer: Pick<Contact, "id" | "first_name" | "last_name"> | null })[]>(),
     listContactOptions(supabase, "acquereur"),
+    matchesForProperty(supabase, id),
   ]);
   if (!property) notFound();
 
@@ -152,6 +155,25 @@ export default async function PropertyPage({ params }: PageProps<"/biens/[id]">)
                 <Info label="Taxe foncière">{property.property_tax ? `${formatEuros(property.property_tax)}/an` : "—"}</Info>
               </dl>
               {property.description && <p className="mt-4 text-sm whitespace-pre-line">{property.description}</p>}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UsersIcon className="size-4" /> Acquéreurs compatibles ({matches.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {matches.length ? (
+                <MatchList matches={matches} show="buyer" />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {["estimation", "en_vente"].includes(property.status)
+                    ? "Aucun acquéreur ne correspond pour l'instant."
+                    : "Le rapprochement ne concerne que les biens en estimation ou en vente."}
+                </p>
+              )}
             </CardContent>
           </Card>
 
