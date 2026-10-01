@@ -95,16 +95,28 @@ export function CheckboxField({
  * (comportement par défaut de React 19 quand on utilise <form action={...}>).
  * Ainsi, en cas d'erreur, l'utilisateur ne perd pas sa saisie.
  *
- * Utilisation : const { state, onSubmit, pending } = useFormAction(monAction);
+ * Utilisation : const { state, onSubmit, pending } = useFormAction(monAction, { onSuccess });
  *               <form onSubmit={onSubmit}> … <SubmitButton pending={pending}> …
+ * `onSuccess` est appelé quand l'action renvoie un message de succès (ex. fermer une fenêtre).
  */
-export function useFormAction(action: (prev: FormState, formData: FormData) => Promise<FormState>) {
-  const [state, dispatch, pending] = React.useActionState(action, {} as FormState);
+export function useFormAction(
+  action: (prev: FormState, formData: FormData) => Promise<FormState>,
+  options: { onSuccess?: (state: FormState) => void } = {},
+) {
+  const [state, setState] = React.useState<FormState>({});
+  const [pending, startTransition] = React.useTransition();
+
   const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
     const formData = new FormData(event.currentTarget, submitter);
-    React.startTransition(() => dispatch(formData));
+    startTransition(async () => {
+      // Si l'action redirige (redirect()), Next.js change de page et la suite n'est pas exécutée.
+      const result = (await action(state, formData)) ?? {};
+      startTransition(() => setState(result));
+      if (result.success) options.onSuccess?.(result);
+    });
   };
-  return { state, onSubmit, pending };
+
+  return { state, onSubmit, pending, reset: () => setState({}) };
 }

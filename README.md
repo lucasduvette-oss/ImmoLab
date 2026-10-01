@@ -32,6 +32,10 @@ biens suivis, rapprochement biens / acquéreurs, relances, et estimations basée
 | Domaine | Ce que vous pouvez faire |
 |---|---|
 | Compte | Créer un compte, se connecter, mot de passe oublié, profil agent et agence |
+| Contacts | Fiche (coordonnées, source, notes), plusieurs rôles (vendeur, acquéreur, prospect, partenaire), boutons Appeler / SMS / Mail, recherche sans accents et filtres |
+| Échanges | Timeline : appel, SMS, mail, rendez-vous (y compris planifiés), visite, note |
+| Acquéreurs | Qualification (budget, accord de principe, apport, délai, vente préalable, motivation) et critères de recherche |
+| Pipelines | Vue Kanban vendeurs et acquéreurs avec glisser-déposer (appui long sur téléphone) |
 
 *(La liste s'enrichit à chaque étape du développement.)*
 
@@ -146,7 +150,20 @@ Après une modification, relancez un déploiement : **Deployments** → **⋯** 
 
 ## 5. Données de démonstration
 
-*(Disponible à partir de l'étape 2.)*
+Le fichier [`supabase/demo-data.sql`](supabase/demo-data.sql) crée des données **fictives** situées à Nantes
+(contacts, acquéreurs avec leurs critères, échanges, rendez-vous du jour…) pour tester l'application.
+
+1. Dans l'application, créez un compte **dédié à la démonstration** (par exemple `prenom.nom+demo@gmail.com` :
+   avec Gmail, le « +demo » arrive dans la même boîte mail). Confirmez-le via l'email reçu.
+2. Ouvrez le fichier `supabase/demo-data.sql` sur GitHub et copiez son contenu.
+3. Dans Supabase → **SQL Editor** → **+ New query**, collez-le.
+4. **Remplacez** `demo@exemple.fr` (ligne `v_email`, vers le haut du fichier) par l'email de votre compte de démonstration.
+5. Cliquez sur **Run**. Le message *Données de démonstration créées* s'affiche dans l'onglet **Messages**.
+6. Connectez-vous à l'application avec ce compte : tout est prêt.
+
+Par sécurité, le script refuse de s'exécuter si le compte contient déjà des contacts
+(il ne mélange jamais démo et vraies données). Pour repartir de zéro, supprimez le compte de démonstration dans
+Supabase → **Authentication** → **Users** (ses données sont supprimées avec lui), recréez-le, et relancez le script.
 
 ---
 
@@ -162,6 +179,25 @@ Après une modification, relancez un déploiement : **Deployments** → **⋯** 
 5. Ouvrez l'application sur votre téléphone et connectez-vous avec le même compte : vous retrouvez le même profil.
 6. Testez **Mot de passe oublié** depuis la page de connexion.
 7. **Se déconnecter** : vous revenez à la page de connexion ; les pages privées ne sont plus accessibles.
+
+### Étape 2 — Contacts
+
+Avec les données de démonstration chargées (section 5) :
+
+1. **Contacts** : 12 contacts s'affichent. Tapez `helene` (sans accent) dans la recherche : *Hélène Moreau* apparaît.
+   Tapez un numéro `06 39 98 10 06` : *Thomas Petit* apparaît.
+2. Touchez **Acquéreurs**, puis choisissez une étape (ex. *Qualifié*) : la liste se filtre.
+3. Ouvrez la fiche de **Camille Robin** :
+   - sur téléphone, **Appeler** ouvre le composeur et **SMS** l'application de messages ;
+   - le bloc **Projet d'achat** résume sa qualification et ses critères ; **Modifier** permet de les changer ;
+   - changez l'étape du **pipeline acquéreur** : un message confirme l'enregistrement.
+4. **Ajouter un échange** : choisissez *Rendez-vous*, une date future et un texte. Il apparaît en haut de la timeline avec la mention « À venir ».
+5. **Nouveau** contact : cochez *Partenaire* (un champ « Type de partenaire » apparaît), saisissez un code postal à 3 chiffres :
+   une erreur s'affiche **sans effacer** ce que vous avez saisi.
+6. **Pipelines** (menu latéral sur ordinateur, ou bouton à côté de « Nouveau » sur téléphone) :
+   glissez *Sophie Garnier* de « Prospect » vers « Estimation » (sur téléphone : appui long sur la carte, puis glisser).
+   Rechargez la page : le changement est conservé.
+7. Supprimez un contact (icône corbeille sur sa fiche) : une confirmation est demandée.
 
 ---
 
@@ -234,9 +270,13 @@ src/
     ui/                composants d'interface (boutons, champs, fenêtres) de type shadcn/ui
   lib/
     supabase/          connexion à Supabase (navigateur, serveur, proxy)
+    queries/           lectures en base réutilisées par plusieurs pages
+    constants.ts       listes de valeurs et libellés (rôles, étapes, types de bien…)
+    types.ts           types TypeScript des tables
     format.ts          mise en forme française (euros, dates, téléphones)
   proxy.ts             protège les pages privées (redirige vers /connexion)
 supabase/
   migrations/          création des tables et des règles de sécurité (SQL)
+  demo-data.sql        données de démonstration fictives (Nantes)
 docs/PLAN.md           plan validé de la V1
 ```
