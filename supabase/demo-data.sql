@@ -31,6 +31,19 @@ declare
   c_lucas uuid := gen_random_uuid();
   c_anne uuid := gen_random_uuid();
   c_karim uuid := gen_random_uuid();
+
+  -- Biens
+  v_date date := (now() at time zone 'Europe/Paris')::date;
+  p_crebillon uuid := gen_random_uuid();
+  p_strasbourg uuid := gen_random_uuid();
+  p_poilus uuid := gen_random_uuid();
+  p_reze uuid := gen_random_uuid();
+  p_bellamy uuid := gen_random_uuid();
+  p_kervegan uuid := gen_random_uuid();
+  p_duguay uuid := gen_random_uuid();
+  p_guisthau uuid := gen_random_uuid();
+  p_villeenbois uuid := gen_random_uuid();
+  p_herblain uuid := gen_random_uuid();
 begin
   select id into v_user from auth.users where email = v_email;
   if v_user is null then
@@ -104,6 +117,69 @@ begin
     (v_user, c_nadia, 'appel', now() - interval '12 days', 'Offre en cours ailleurs, garder le contact.'),
     (v_user, c_lucas, 'appel', now() - interval '60 days', 'Pas vendeur pour l''instant, rappeler dans 2 mois.'),
     (v_user, c_karim, 'rdv', (v_today + interval '2 days' + time '09:30') at time zone 'Europe/Paris', 'Petit-déjeuner partenaires.');
+
+  -- -------------------------------------------------------------------
+  -- Biens (adresses réelles de Nantes et environs, biens fictifs)
+  -- -------------------------------------------------------------------
+  insert into public.properties
+    (id, user_id, seller_contact_id, type, address, postal_code, city, citycode, latitude, longitude,
+     surface, rooms, bedrooms, floor, has_elevator, outdoor, parking, construction_year, dpe, ges, condition,
+     price, charges_annual, property_tax, description, status, mandate_type, mandate_start, mandate_end, mandate_fees)
+  values
+    (p_crebillon, v_user, c_helene, 'appartement', '12 Rue Crébillon', '44000', 'Nantes', '44109', 47.2133, -1.5604,
+     78, 4, 2, 3, true, 'balcon', 'aucun', 1890, 'D', 'D', 'bon',
+     395000, 1800, 1450, 'Bel appartement haussmannien en plein centre, parquet, moulures et cheminées. Balcon filant.',
+     'en_vente', 'exclusif', v_date - 70, v_date + 20, 15000),
+    (p_strasbourg, v_user, c_patrick, 'appartement', '8 Rue de Strasbourg', '44000', 'Nantes', '44109', 47.2165, -1.5509,
+     65, 3, 2, 2, false, 'aucun', 'aucun', 1930, 'E', 'E', 'a_rafraichir',
+     255000, 1200, 1100, 'Appartement traversant à rafraîchir, proche cathédrale.',
+     'estimation', null, null, null, null),
+    (p_poilus, v_user, c_sophie, 'maison', '25 Boulevard des Poilus', '44300', 'Nantes', '44109', 47.2310, -1.5320,
+     110, 5, 4, 0, null, 'jardin', 'garage', 1965, 'D', 'C', 'bon',
+     489000, null, 1900, 'Maison familiale sur sous-sol avec jardin de 400 m².',
+     'estimation', null, null, null, null),
+    (p_reze, v_user, c_jeanluc, 'maison', '4 Rue du Château', '44400', 'Rezé', '44143', 47.1906, -1.5560,
+     120, 5, 4, 0, null, 'jardin', 'garage', 1978, 'D', 'D', 'bon',
+     435000, null, 2100, 'Maison lumineuse, séjour de 40 m², quatre chambres, jardin arboré et garage double.',
+     'en_vente', 'simple', v_date - 45, v_date + 75, 18000),
+    (p_bellamy, v_user, c_isabelle, 'maison', '17 Rue Paul Bellamy', '44000', 'Nantes', '44109', 47.2225, -1.5577,
+     95, 4, 3, 0, null, 'jardin', 'aucun', 1925, 'E', 'E', 'a_rafraichir',
+     520000, null, 2300, 'Maison de ville avec jardin de ville, beaux volumes, travaux de rafraîchissement à prévoir.',
+     'sous_offre', 'exclusif', v_date - 85, v_date + 5, 20000),
+    (p_kervegan, v_user, c_lucas, 'appartement', '3 Rue Kervégan', '44000', 'Nantes', '44109', 47.2120, -1.5575,
+     92, 4, 2, 2, false, 'aucun', 'aucun', 1750, 'F', 'F', 'travaux',
+     380000, 2200, 1600, 'Appartement de caractère sur l''île Feydeau, gros travaux à prévoir.',
+     'estimation', null, null, null, null),
+    (p_duguay, v_user, c_jeanluc, 'appartement', '10 Allée Duguay-Trouin', '44000', 'Nantes', '44109', 47.2128, -1.5555,
+     45, 2, 1, 4, true, 'balcon', 'place', 1972, 'D', 'E', 'bon',
+     189000, 1400, 850, 'T2 avec balcon et place de parking, idéal investissement locatif.',
+     'en_vente', 'simple', v_date - 10, v_date + 80, 9000),
+    (p_guisthau, v_user, c_sophie, 'appartement', '56 Boulevard Guist''hau', '44000', 'Nantes', '44109', 47.2172, -1.5652,
+     70, 3, 2, 5, true, 'terrasse', 'place', 1968, 'C', 'C', 'tres_bon',
+     315000, 1900, 1250, 'Dernier étage avec terrasse de 15 m², rénové en 2022, ascenseur et parking.',
+     'en_vente', 'exclusif', v_date - 30, v_date + 150, 14000),
+    (p_villeenbois, v_user, c_helene, 'appartement', '15 Rue de la Ville-en-Bois', '44100', 'Nantes', '44109', 47.2069, -1.5844,
+     58, 3, 2, 1, false, 'balcon', 'aucun', 1985, 'D', 'D', 'bon',
+     229000, 1100, 950, 'T3 calme avec balcon, proche tramway.',
+     'en_vente', 'simple', v_date - 20, v_date + 70, 10000),
+    (p_herblain, v_user, c_jeanluc, 'maison', '7 Rue de la Paix', '44800', 'Saint-Herblain', '44162', 47.2165, -1.6420,
+     85, 4, 3, 0, null, 'jardin', 'place', 1995, 'C', 'B', 'bon',
+     299000, null, 1500, 'Maison de plain-pied vendue en 3 semaines.',
+     'vendu', 'exclusif', v_date - 120, v_date - 30, 13000);
+
+  -- -------------------------------------------------------------------
+  -- Visites et retours
+  -- -------------------------------------------------------------------
+  insert into public.visits (user_id, property_id, buyer_contact_id, visited_at, rating, feedback, feedback_sent_at)
+  values
+    -- Retour saisi mais pas encore transmis au vendeur
+    (v_user, p_reze, c_camille, now() - interval '2 days', 4, 'Coup de cœur pour le jardin, trouve la cuisine à refaire.', null),
+    -- Visite passée sans retour
+    (v_user, p_villeenbois, c_nadia, now() - interval '5 days', null, null, null),
+    -- Retour transmis
+    (v_user, p_guisthau, c_isabelle, now() - interval '10 days', 3, 'Aime la terrasse, hésite sur le prix.', now() - interval '9 days'),
+    -- Visite prévue aujourd'hui à 14 h
+    (v_user, p_duguay, c_julien, (v_today + time '14:00') at time zone 'Europe/Paris', null, null, null);
 
   raise notice 'Données de démonstration créées pour %.', v_email;
 end;

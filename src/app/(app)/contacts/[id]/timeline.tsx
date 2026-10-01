@@ -1,17 +1,21 @@
-import { HistoryIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import Link from "next/link";
+import { DoorOpenIcon, HistoryIcon, PencilIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/confirm-button";
+import { Stars } from "@/components/stars";
 import { INTERACTION_KINDS } from "@/lib/constants";
 import { formatDateTime } from "@/lib/format";
-import type { Interaction } from "@/lib/types";
+import type { Interaction, Visit } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { deleteInteraction } from "../actions";
 import { InteractionDialog } from "./interaction-dialog";
 import { InteractionIcon } from "./interaction-icon";
 
-/** Élément affiché dans la timeline (un échange, ou une visite à partir de l'étape 3). */
-export type TimelineItem = { type: "interaction"; date: string; interaction: Interaction };
+/** Élément affiché dans la timeline : un échange, ou une visite d'un bien (acquéreurs). */
+export type TimelineItem =
+  | { type: "interaction"; date: string; interaction: Interaction }
+  | { type: "visit"; date: string; visit: Visit; propertyTitle: string };
 
 /** Timeline des échanges, du plus récent au plus ancien. Les rendez-vous à venir sont mis en avant. */
 export function Timeline({ contactId, items }: { contactId: string; items: TimelineItem[] }) {
@@ -27,6 +31,7 @@ export function Timeline({ contactId, items }: { contactId: string; items: Timel
   return (
     <ol className="relative grid gap-4 border-l pl-5">
       {items.map((item) => {
+        if (item.type === "visit") return <VisitItem key={item.visit.id} item={item} upcoming={item.date > now} />;
         const it = item.interaction;
         const upcoming = it.occurred_at > now;
         return (
@@ -69,5 +74,33 @@ export function Timeline({ contactId, items }: { contactId: string; items: Timel
         );
       })}
     </ol>
+  );
+}
+
+/** Visite d'un bien dans la timeline d'un acquéreur (modifiable depuis la fiche du bien). */
+function VisitItem({ item, upcoming }: { item: Extract<TimelineItem, { type: "visit" }>; upcoming: boolean }) {
+  const v = item.visit;
+  return (
+    <li className="relative">
+      <span
+        className={cn(
+          "absolute top-0.5 -left-[33px] flex size-7 items-center justify-center rounded-full border bg-card text-muted-foreground",
+          upcoming && "border-primary text-primary",
+        )}
+      >
+        <DoorOpenIcon className="size-3.5" />
+      </span>
+      <p className="text-sm font-medium">
+        Visite :{" "}
+        <Link href={`/biens/${v.property_id}`} className="text-primary hover:underline">
+          {item.propertyTitle}
+        </Link>
+        {upcoming && <span className="ml-2 text-xs font-semibold text-primary">À venir</span>}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        {formatDateTime(v.visited_at)} {v.rating && <Stars value={v.rating} />}
+      </p>
+      {v.feedback && <p className="mt-1 text-sm whitespace-pre-line">{v.feedback}</p>}
+    </li>
   );
 }

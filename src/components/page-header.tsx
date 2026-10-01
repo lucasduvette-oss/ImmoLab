@@ -30,7 +30,7 @@ export function PageHeader({
           </Link>
         )}
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-bold tracking-tight">{title}</h1>
+          <h1 className="text-xl font-bold tracking-tight break-words sm:text-2xl">{title}</h1>
           {description && <div className="mt-0.5 text-sm text-muted-foreground">{description}</div>}
         </div>
       </div>

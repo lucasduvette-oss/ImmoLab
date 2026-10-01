@@ -1,3 +1,4 @@
+import { Stars } from "@/components/stars";
 import { MUST_HAVES, PROPERTY_TYPES, TIMEFRAMES } from "@/lib/constants";
 import { formatEuros, formatSurface } from "@/lib/format";
 import type { BuyerProfile } from "@/lib/types";
@@ -26,14 +27,7 @@ export function BuyerSummary({ profile }: { profile: BuyerProfile }) {
           <Row label="Délai">{profile.timeframe ? TIMEFRAMES[profile.timeframe] : "—"}</Row>
           <Row label="Vente préalable">{yesNo(profile.needs_prior_sale)}</Row>
           <Row label="Motivation">
-            {profile.motivation ? (
-              <span aria-label={`${profile.motivation} sur 5`}>
-                {"★".repeat(profile.motivation)}
-                <span className="text-muted-foreground/40">{"★".repeat(5 - profile.motivation)}</span>
-              </span>
-            ) : (
-              "—"
-            )}
+            {profile.motivation ? <Stars value={profile.motivation} /> : "—"}
           </Row>
         </dl>
       </div>

@@ -100,3 +100,54 @@ export const MUST_HAVES = {
   ascenseur: "Ascenseur",
 } as const;
 export type MustHave = keyof typeof MUST_HAVES;
+
+export const PROPERTY_STATUSES = {
+  estimation: "Estimation",
+  en_vente: "En vente",
+  sous_offre: "Sous offre",
+  sous_compromis: "Sous compromis",
+  vendu: "Vendu",
+  retire: "Retiré",
+} as const;
+export type PropertyStatus = keyof typeof PROPERTY_STATUSES;
+
+export const OUTDOOR_TYPES = {
+  aucun: "Aucun",
+  balcon: "Balcon",
+  terrasse: "Terrasse",
+  jardin: "Jardin",
+} as const;
+export type OutdoorType = keyof typeof OUTDOOR_TYPES;
+
+export const PARKING_TYPES = {
+  aucun: "Aucun",
+  place: "Place de parking",
+  garage: "Garage / box",
+} as const;
+export type ParkingType = keyof typeof PARKING_TYPES;
+
+export const PROPERTY_CONDITIONS = {
+  neuf: "Neuf / récent",
+  tres_bon: "Très bon état",
+  bon: "Bon état",
+  a_rafraichir: "À rafraîchir",
+  travaux: "Travaux importants",
+} as const;
+export type PropertyCondition = keyof typeof PROPERTY_CONDITIONS;
+
+export const MANDATE_TYPES = {
+  simple: "Simple",
+  exclusif: "Exclusif",
+  semi_exclusif: "Semi-exclusif",
+} as const;
+export type MandateType = keyof typeof MANDATE_TYPES;
+
+/** Classes énergie (DPE) et climat (GES). */
+export const ENERGY_CLASSES = ["A", "B", "C", "D", "E", "F", "G"] as const;
+export type EnergyClass = (typeof ENERGY_CLASSES)[number];
+
+/** Nombre de jours avant l'échéance du mandat à partir duquel une alerte est affichée. */
+export const MANDATE_ALERT_DAYS = 30;
+
+/** Espace de stockage Supabase (privé) des photos des biens. */
+export const PHOTOS_BUCKET = "property-photos";

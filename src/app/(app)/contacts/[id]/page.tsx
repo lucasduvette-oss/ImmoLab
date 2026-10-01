@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MailIcon, MapPinIcon, PencilIcon, PhoneIcon, SearchIcon, Trash2Icon } from "lucide-react";
+import { BuildingIcon, MailIcon, MapPinIcon, PencilIcon, PhoneIcon, PlusIcon, SearchIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,10 +9,12 @@ import { PageHeader } from "@/components/page-header";
 import { RoleBadges } from "@/components/contact-badges";
 import { ContactActions } from "@/components/contact-actions";
 import { ConfirmButton } from "@/components/confirm-button";
+import { StatusBadge } from "@/components/property-badges";
 import { CONTACT_SOURCES } from "@/lib/constants";
-import { formatPhone, fullName } from "@/lib/format";
+import { formatEuros, formatPhone, fullName } from "@/lib/format";
+import { propertyTitle } from "@/lib/property";
 import { requireUser } from "@/lib/supabase/server";
-import type { BuyerProfile, Contact, Interaction } from "@/lib/types";
+import type { BuyerProfile, Contact, Interaction, Property, Visit } from "@/lib/types";
 import { deleteContact } from "../actions";
 import { BuyerSummary } from "./buyer-summary";
 import { InteractionDialog } from "./interaction-dialog";
@@ -30,16 +32,26 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
   const { id } = await params;
   const { supabase } = await requireUser();
 
-  const [{ data: contact }, { data: buyer }, { data: interactions }] = await Promise.all([
+  const [{ data: contact }, { data: buyer }, { data: interactions }, { data: visits }, { data: properties }] = await Promise.all([
     supabase.from("contacts").select("*").eq("id", id).maybeSingle<Contact>(),
     supabase.from("buyer_profiles").select("*").eq("contact_id", id).maybeSingle<BuyerProfile>(),
     supabase.from("interactions").select("*").eq("contact_id", id).order("occurred_at", { ascending: false }).returns<Interaction[]>(),
+    supabase
+      .from("visits")
+      .select("*, property:properties(type, rooms, surface, city)")
+      .eq("buyer_contact_id", id)
+      .returns<(Visit & { property: Pick<Property, "type" | "rooms" | "surface" | "city"> })[]>(),
+    supabase.from("properties").select("*").eq("seller_contact_id", id).order("updated_at", { ascending: false }).returns<Property[]>(),
   ]);
   if (!contact) notFound();
 
   const isSeller = contact.roles.includes("vendeur");
   const isBuyer = contact.roles.includes("acquereur");
-  const timeline: TimelineItem[] = (interactions ?? []).map((i) => ({ type: "interaction", date: i.occurred_at, interaction: i }));
+  // Timeline : échanges + visites de biens, du plus récent au plus ancien.
+  const timeline: TimelineItem[] = [
+    ...(interactions ?? []).map((i): TimelineItem => ({ type: "interaction", date: i.occurred_at, interaction: i })),
+    ...(visits ?? []).map((v): TimelineItem => ({ type: "visit", date: v.visited_at, visit: v, propertyTitle: propertyTitle(v.property) })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
   const address = [contact.address, [contact.postal_code, contact.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
 
   return (
@@ -108,6 +120,40 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
               {contact.notes && <p className="mt-2 rounded-md bg-muted p-3 whitespace-pre-line">{contact.notes}</p>}
             </CardContent>
           </Card>
+
+          {(isSeller || !!properties?.length) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BuildingIcon className="size-4" /> Biens en vente
+                </CardTitle>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/biens/nouveau?vendeur=${contact.id}`}>
+                    <PlusIcon /> Ajouter
+                  </Link>
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {properties?.length ? (
+                  <ul className="divide-y">
+                    {properties.map((p) => (
+                      <li key={p.id}>
+                        <Link href={`/biens/${p.id}`} className="flex items-center justify-between gap-2 py-2 text-sm hover:underline">
+                          <span className="min-w-0 truncate">{propertyTitle(p)}</span>
+                          <span className="flex shrink-0 items-center gap-2">
+                            {formatEuros(p.price)}
+                            <StatusBadge status={p.status} />
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Aucun bien lié à ce vendeur.</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {isBuyer && (
             <Card>

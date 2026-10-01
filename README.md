@@ -36,6 +36,10 @@ biens suivis, rapprochement biens / acquéreurs, relances, et estimations basée
 | Échanges | Timeline : appel, SMS, mail, rendez-vous (y compris planifiés), visite, note |
 | Acquéreurs | Qualification (budget, accord de principe, apport, délai, vente préalable, motivation) et critères de recherche |
 | Pipelines | Vue Kanban vendeurs et acquéreurs avec glisser-déposer (appui long sur téléphone) |
+| Biens | Fiche complète (type, adresse localisée, surface, pièces, étage, DPE/GES, état, prix, charges, taxe foncière…), statut, lien vers le vendeur |
+| Photos | Ajout depuis l'appareil photo ou la galerie du téléphone (photos réduites automatiquement), photo principale, stockage privé |
+| Mandat | Type, dates, honoraires, alerte 30 jours avant l'échéance |
+| Visites | Date, acquéreur, retour de visite (note sur 5 + avis), suivi de la transmission au vendeur |
 
 *(La liste s'enrichit à chaque étape du développement.)*
 
@@ -199,6 +203,22 @@ Avec les données de démonstration chargées (section 5) :
    Rechargez la page : le changement est conservé.
 7. Supprimez un contact (icône corbeille sur sa fiche) : une confirmation est demandée.
 
+### Étape 3 — Biens
+
+1. **Biens** : 10 biens s'affichent avec leur statut. Deux portent une alerte orange « Mandat : échéance dans … jours ».
+   Le filtre **Échéance < 30 jours** ne garde que ceux-là.
+2. Ouvrez l'appartement du **12 rue Crébillon** : un bandeau rappelle l'échéance du mandat.
+3. Sur téléphone, touchez **Ajouter des photos** : choisissez **Prendre une photo** ou la galerie. La photo apparaît
+   (elle est réduite avant l'envoi pour aller vite en 4G). Le menu **⋮** d'une photo permet d'en faire la photo principale ou de la supprimer.
+4. **Ajouter une visite** : choisissez un acquéreur, une note et un avis, cochez ou non « Retour transmis au vendeur ».
+   Le bouton **Marquer le retour comme transmis** enregistre la date de transmission.
+5. Changez le **statut** du bien avec le menu à côté du prix.
+6. **Nouveau** bien : tapez le début d'une adresse (ex. `5 place royale nantes`) puis choisissez une suggestion :
+   le code postal, la ville et la position GPS se remplissent (message « Adresse localisée »).
+   Mettez une date de fin de mandat antérieure à la date de début : une erreur s'affiche sans effacer la saisie.
+7. Ouvrez la fiche du vendeur **Jean-Luc Bernard** : le bloc **Biens en vente** liste ses biens. Sur la fiche de
+   **Camille Robin**, la visite de la maison de Rezé apparaît dans la timeline.
+
 ---
 
 ## 7. Travailler sur le code en local (facultatif)
@@ -268,12 +288,15 @@ src/
     auth/confirm/      arrivée des liens reçus par email
   components/
     ui/                composants d'interface (boutons, champs, fenêtres) de type shadcn/ui
+    address-autocomplete.tsx  saisie d'adresse avec suggestions (géocodage IGN)
   lib/
     supabase/          connexion à Supabase (navigateur, serveur, proxy)
     queries/           lectures en base réutilisées par plusieurs pages
     constants.ts       listes de valeurs et libellés (rôles, étapes, types de bien…)
     types.ts           types TypeScript des tables
     format.ts          mise en forme française (euros, dates, téléphones)
+    geocoding.ts       adresse → coordonnées GPS (Géoplateforme IGN)
+    property.ts        titre d'un bien, alerte d'échéance du mandat
   proxy.ts             protège les pages privées (redirige vers /connexion)
 supabase/
   migrations/          création des tables et des règles de sécurité (SQL)
