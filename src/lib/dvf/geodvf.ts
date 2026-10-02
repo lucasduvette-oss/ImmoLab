@@ -2,10 +2,10 @@ import "server-only";
 
 import { distanceMeters, type Comparable, type EstimationPropertyType } from "@/lib/estimation";
 import type { SearchInput } from "@/lib/estimation-schema";
-import { reverseCitycode } from "@/lib/geocoding";
+import { reverseCommune } from "@/lib/geocoding";
 import { parseCsv } from "./csv";
-import { fetchWithRetry, MIN_SALE_PRICE, readText, toNumber } from "./common";
-import { DvfUnavailableError } from "./types";
+import { fetchWithRetry, MIN_SALE_PRICE, readText, SEARCH_DEADLINE_MS, toNumber } from "./common";
+import { DvfTooLongError, DvfUnavailableError } from "./types";
 
 /**
  * Source de repli : fichiers « DVF géolocalisées » d'Etalab (data.gouv.fr), un fichier CSV
@@ -108,15 +108,26 @@ const CACHE_MS = 12 * 60 * 60 * 1000;
 /** Taille maximale d'un fichier communal (les plus grandes villes dépassent rarement 20 Mo par an). */
 const MAX_FILE_BYTES = 80 * 1024 * 1024;
 
-async function loadCommuneYear(citycode: string, year: number, deadline?: AbortSignal): Promise<GeoSale[]> {
+async function loadCommuneYear(citycode: string, year: number, deadline: AbortSignal): Promise<GeoSale[]> {
   const key = `${citycode}-${year}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.sales;
 
   const url = `${baseUrl()}/${year}/communes/${departmentOf(citycode)}/${citycode}.csv`;
-  const res = await fetchWithRetry(url, { timeoutMs: 25_000, retries: 1, retryNetworkErrors: true, cache: "no-store", deadline });
-  // 404 : aucune vente cette année-là dans la commune (ou année pas encore publiée).
-  const sales = res.status === 404 ? [] : res.ok ? reduceGeoDvfRows(parseCsv(await readText(res, MAX_FILE_BYTES))) : [];
+  let sales: GeoSale[] = [];
+  // Deux essais : une coupure pendant le téléchargement d'un gros fichier est la panne la plus probable.
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetchWithRetry(url, { timeoutMs: 25_000, retries: 1, retryNetworkErrors: true, cache: "no-store", deadline });
+    // 404 : aucune vente cette année-là dans la commune (ou année pas encore publiée).
+    if (!res.ok) break;
+    try {
+      sales = reduceGeoDvfRows(parseCsv(await readText(res, MAX_FILE_BYTES)));
+      break;
+    } catch (e) {
+      if (deadline.aborted) throw new DvfTooLongError();
+      if (attempt >= 1 || !(e instanceof DvfUnavailableError) || !e.retryable) throw e;
+    }
+  }
   if (cache.size > 40) cache.delete(cache.keys().next().value as string);
   cache.set(key, { at: Date.now(), sales });
   return sales;
@@ -148,55 +159,104 @@ export function samplePoints(latitude: number, longitude: number, radiusM: numbe
   return points;
 }
 
-/** Communes touchées par le cercle de recherche (géocodage inverse de points répartis dans le cercle). */
-async function communesAround(input: SearchInput): Promise<{ codes: string[]; geocodingDown: boolean }> {
-  const codes = new Set<string>();
-  if (input.citycode) codes.add(input.citycode);
+/** Temps accordé à la recherche des communes voisines (avant le téléchargement des fichiers). */
+const GEOCODING_BUDGET_MS = 10_000;
+/** Requêtes de géocodage par groupe, et durée minimale d'un groupe : ≈ 40 requêtes par seconde (limite du service : 50). */
+const GEOCODING_BATCH = 5;
+const GEOCODING_BATCH_MIN_MS = 125;
+
+type Commune = { citycode: string; name: string; distance: number };
+
+/**
+ * Communes touchées par le cercle de recherche (géocodage inverse de points répartis dans le cercle),
+ * de la plus proche du bien à la plus éloignée.
+ */
+async function communesAround(input: SearchInput): Promise<{ communes: Commune[]; geocodingDown: boolean; geocodingPartial: boolean }> {
+  const found = new Map<string, Commune>();
+  if (input.citycode) found.set(input.citycode, { citycode: input.citycode, name: input.city || input.citycode, distance: 0 });
   const points = samplePoints(input.latitude, input.longitude, input.radiusM);
-  let missed = 0;
-  // Par petits groupes, pour rester sous la limite du service de géocodage (50 requêtes par seconde).
-  for (let i = 0; i < points.length; i += 5) {
-    const found = await Promise.all(points.slice(i, i + 5).map(([lat, lon]) => reverseCitycode(lat, lon)));
-    for (const code of found) {
-      if (code && CITYCODE.test(code)) codes.add(code);
-      else missed++;
-    }
+  const budget = AbortSignal.timeout(GEOCODING_BUDGET_MS);
+  let asked = 0;
+  let answered = 0;
+  for (let i = 0; i < points.length && !budget.aborted; i += GEOCODING_BATCH) {
+    const started = Date.now();
+    const batch = points.slice(i, i + GEOCODING_BATCH);
+    asked += batch.length;
+    const results = await Promise.all(batch.map(([lat, lon]) => reverseCommune(lat, lon, budget)));
+    results.forEach((r, k) => {
+      if (!r || !CITYCODE.test(r.citycode)) return;
+      answered++;
+      const distance = distanceMeters(input.latitude, input.longitude, batch[k][0], batch[k][1]);
+      const known = found.get(r.citycode);
+      if (!known) found.set(r.citycode, { citycode: r.citycode, name: r.city, distance });
+      else if (distance < known.distance) known.distance = distance;
+    });
+    const wait = GEOCODING_BATCH_MIN_MS - (Date.now() - started);
+    if (wait > 0 && i + GEOCODING_BATCH < points.length) await new Promise((resolve) => setTimeout(resolve, wait));
   }
-  // Aucune réponse du tout : le service de géocodage est probablement indisponible.
-  return { codes: [...codes], geocodingDown: missed === points.length };
+  return {
+    communes: [...found.values()].sort((a, b) => a.distance - b.distance),
+    geocodingDown: answered === 0,
+    geocodingPartial: answered > 0 && asked < points.length,
+  };
+}
+
+/** « 2024 », « 2023 et 2025 », « 2022 à 2024 » */
+function yearsLabel(years: number[]) {
+  const sorted = [...years].sort((a, b) => a - b);
+  if (sorted.length === 1) return String(sorted[0]);
+  const contiguous = sorted.every((y, i) => i === 0 || y === sorted[i - 1] + 1);
+  return contiguous ? `${sorted[0]} à ${sorted.at(-1)}` : `${sorted.slice(0, -1).join(", ")} et ${sorted.at(-1)}`;
 }
 
 /** Ventes comparables d'après les fichiers geo-dvf (source de repli). */
 export async function findComparablesGeoDvf(
   input: SearchInput & { minDate: string },
-  deadline?: AbortSignal,
+  deadlineMs = SEARCH_DEADLINE_MS,
 ): Promise<{ comparables: Comparable[]; notes: string[] }> {
-  const { codes: communes, geocodingDown } = await communesAround(input);
+  const { communes, geocodingDown, geocodingPartial } = await communesAround(input);
   if (!communes.length) throw new DvfUnavailableError("Impossible de déterminer la commune du bien pour lire les données DVF.");
+  // Commune du bien : celle de l'adresse, sinon celle du point géocodé le plus proche.
+  const subject = communes[0];
 
+  // Le délai des téléchargements commence après la recherche des communes. Les communes les plus proches
+  // et les années les plus récentes passent en premier : ce sont les plus utiles si le délai est atteint.
+  const deadline = AbortSignal.timeout(deadlineMs);
   const firstYear = Number(input.minDate.slice(0, 4));
   const lastYear = new Date().getFullYear();
-  const jobs: [string, number][] = [];
-  for (const c of communes) for (let y = firstYear; y <= lastYear; y++) jobs.push([c, y]);
+  const jobs: [Commune, number][] = [];
+  for (const c of communes) for (let y = lastYear; y >= firstYear; y--) jobs.push([c, y]);
 
   const sales: GeoSale[] = [];
-  const failed = new Set<string>();
+  const failed = new Map<Commune, number[]>();
+  const loaded = new Set<Commune>();
   for (let i = 0; i < jobs.length; i += 4) {
-    const batch = await Promise.allSettled(jobs.slice(i, i + 4).map(([c, y]) => loadCommuneYear(c, y, deadline)));
-    batch.forEach((b, k) => {
-      if (b.status === "fulfilled") sales.push(...b.value);
-      else failed.add(jobs[i + k][0]);
+    const batch = jobs.slice(i, i + 4);
+    const results = await Promise.allSettled(batch.map(([c, y]) => loadCommuneYear(c.citycode, y, deadline)));
+    results.forEach((r, k) => {
+      const [commune, year] = batch[k];
+      if (r.status === "fulfilled") {
+        sales.push(...r.value);
+        loaded.add(commune);
+      } else failed.set(commune, [...(failed.get(commune) ?? []), year]);
     });
   }
-  // Sans les ventes de la commune du bien, le résultat n'aurait pas de sens : on s'arrête.
-  const subjectCommune = input.citycode ?? communes[0];
-  if (failed.has(subjectCommune) || failed.size === communes.length) {
+
+  // Sans aucune vente lue pour la commune du bien, le résultat n'aurait pas de sens : on s'arrête.
+  if (!loaded.has(subject)) {
+    if (deadline.aborted) throw new DvfTooLongError();
     throw new DvfUnavailableError("Les fichiers DVF de data.gouv.fr sont momentanément indisponibles.");
   }
 
   const notes: string[] = [];
-  if (failed.size) notes.push(`Ventes non chargées pour ${failed.size > 1 ? "les communes" : "la commune"} ${[...failed].join(", ")} (réessayez plus tard).`);
-  if (geocodingDown) notes.push("Communes voisines non identifiées (service de géocodage indisponible) : seules les ventes de la commune du bien sont prises en compte.");
+  for (const [commune, years] of failed) {
+    notes.push(`Ventes ${yearsLabel(years)} non chargées pour ${commune.name}${deadline.aborted ? " (délai dépassé)" : ""}.`);
+  }
+  if (geocodingDown) {
+    notes.push("Communes voisines non identifiées (service de géocodage indisponible) : seules les ventes de la commune du bien sont prises en compte.");
+  } else if (geocodingPartial) {
+    notes.push("Le service de géocodage est lent : des communes voisines ont pu être oubliées.");
+  }
 
   const tolerance = input.surfaceTolerancePct / 100;
   const comparables = sales.flatMap((s) => {

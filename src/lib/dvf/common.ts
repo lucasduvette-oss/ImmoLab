@@ -1,6 +1,6 @@
 import { flagOutliers, MAX_COMPARABLES, type Comparable } from "@/lib/estimation";
 import { formatDate } from "@/lib/format";
-import { DvfUnavailableError } from "./types";
+import { DvfTooLongError, DvfUnavailableError } from "./types";
 
 /** Lit un nombre reçu en texte (« 250000.00 ») ou en nombre ; vide ou invalide → null. */
 export function toNumber(value: unknown): number | null {
@@ -118,7 +118,7 @@ export async function fetchWithRetry(
 }
 
 function tooLong() {
-  return new DvfUnavailableError("La recherche des ventes DVF prend trop de temps : réduisez le rayon ou la période, puis réessayez.");
+  return new DvfTooLongError();
 }
 
 /**
@@ -128,7 +128,7 @@ function tooLong() {
  */
 export async function readText(res: Response, maxBytes: number): Promise<string> {
   const declared = Number(res.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > maxBytes) throw new DvfUnavailableError("Réponse du service DVF trop volumineuse.");
+  if (Number.isFinite(declared) && declared > maxBytes) throw new DvfUnavailableError("Réponse du service DVF trop volumineuse.", false);
   try {
     if (!res.body) return await res.text();
     const reader = res.body.getReader();
@@ -140,7 +140,7 @@ export async function readText(res: Response, maxBytes: number): Promise<string>
       size += value.byteLength;
       if (size > maxBytes) {
         await reader.cancel();
-        throw new DvfUnavailableError("Réponse du service DVF trop volumineuse.");
+        throw new DvfUnavailableError("Réponse du service DVF trop volumineuse.", false);
       }
       chunks.push(value);
     }

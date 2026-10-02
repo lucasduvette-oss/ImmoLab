@@ -166,7 +166,8 @@ export function fullName(c: { first_name?: string | null; last_name: string }): 
  */
 export function parseFrenchNumber(value: string): number | null {
   let cleaned = value.replace(/[\s\u00a0\u202f€%]/g, "").replace("\u2212", "-");
-  if (/^-?\d{1,3}(\.\d{3})+$/.test(cleaned)) cleaned = cleaned.replace(/\./g, "");
+  // (« 0.500 » reste 0,5 : un nombre groupé par milliers ne commence pas par 0)
+  if (/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(cleaned)) cleaned = cleaned.replace(/\./g, "");
   cleaned = cleaned.replace(",", ".");
   if (cleaned === "" || cleaned === "-") return null;
   const n = Number(cleaned);

@@ -50,6 +50,11 @@ describe("validation des recherches DVF", () => {
     expect(firstMessage(r)).toMatch(/zone couverte par DVF/);
   });
 
+  it("donne des messages en français", () => {
+    expect(firstMessage(searchSchema.safeParse({ ...search, rooms: -1 }))).toBe("Nombre de pièces invalide.");
+    expect(firstMessage(searchSchema.safeParse({ ...search, surfaceTolerancePct: 1 }))).toMatch(/^Trop petit/);
+  });
+
   it("limite le rayon et la période à ceux proposés à l'écran", () => {
     expect(searchSchema.safeParse({ ...search, radiusM: 5000 }).success).toBe(false);
     expect(searchSchema.safeParse({ ...search, periodYears: 10 }).success).toBe(false);

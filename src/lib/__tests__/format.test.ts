@@ -79,6 +79,9 @@ describe("saisie de nombres", () => {
   it("comprend le point comme séparateur de milliers", () => {
     expect(parseFrenchNumber("280.000")).toBe(280000);
     expect(parseFrenchNumber("1.250.000")).toBe(1250000);
+    // un nombre commençant par 0 n'est pas groupé par milliers
+    expect(parseFrenchNumber("0.500")).toBe(0.5);
+    expect(parseFrenchNumber("-0.250")).toBe(-0.25);
   });
   it("renvoie null pour une saisie vide ou invalide", () => {
     expect(parseFrenchNumber("")).toBeNull();

@@ -3,7 +3,7 @@ import "server-only";
 import { boundingBox, distanceMeters, splitBoundingBox, type Comparable, type EstimationPropertyType } from "@/lib/estimation";
 import type { SearchInput } from "@/lib/estimation-schema";
 import { fetchWithRetry, MIN_SALE_PRICE, normalizeLabel, readJson, toNumber } from "./common";
-import { DvfUnavailableError } from "./types";
+import { DvfTooLongError, DvfUnavailableError } from "./types";
 
 /**
  * Source principale : API « Données foncières » du Cerema, jeu DVF+ open data
@@ -176,7 +176,13 @@ async function fetchPage(url: string, deadline?: AbortSignal): Promise<{ feature
   return { features: json.features as CeremaFeature[], hasNext: Boolean(json.next) };
 }
 
-/** Ventes comparables autour du bien d'après l'API du Cerema. */
+/** Nombre de carreaux interrogés en même temps (le service est fragile : on reste raisonnable). */
+const TILE_CONCURRENCY = 3;
+
+/**
+ * Ventes comparables autour du bien d'après l'API du Cerema.
+ * Si le délai global est atteint après avoir lu des ventes, on garde celles-ci (truncated = true).
+ */
 export async function findComparablesCerema(
   input: SearchInput & { minDate: string },
   deadline?: AbortSignal,
@@ -186,8 +192,9 @@ export async function findComparablesCerema(
   const comparables: Comparable[] = [];
   let truncated = false;
   let pagesRead = 0;
+  let timedOut = false;
 
-  for (const tile of tiles) {
+  async function readTile(tile: (typeof tiles)[number]) {
     const params = new URLSearchParams({
       in_bbox: [tile.minLon, tile.minLat, tile.maxLon, tile.maxLat].map((v) => v.toFixed(6)).join(","),
       codtypbien: TYPE_CODES[input.type],
@@ -199,20 +206,44 @@ export async function findComparablesCerema(
       page_size: String(PAGE_SIZE),
     });
     for (let page = 1; page <= MAX_PAGES_PER_TILE; page++) {
+      if (timedOut) return;
       if (pagesRead >= MAX_PAGES_PER_SEARCH) {
         truncated = true;
-        break;
+        return;
       }
       params.set("page", String(page));
-      const { features, hasNext } = await fetchPage(`${baseUrl()}/dvf_opendata/geomutations/?${params.toString()}`, deadline);
       pagesRead++;
+      const { features, hasNext } = await fetchPage(`${baseUrl()}/dvf_opendata/geomutations/?${params.toString()}`, deadline);
       for (const f of features) {
         const c = ceremaToComparable(f, input);
         if (c) comparables.push(c);
       }
-      if (!hasNext) break;
+      if (!hasNext) return;
       if (page === MAX_PAGES_PER_TILE) truncated = true;
     }
+  }
+
+  // Quelques « files » qui se partagent les carreaux.
+  const queue = [...tiles];
+  let failure: unknown = null;
+  await Promise.all(
+    Array.from({ length: Math.min(TILE_CONCURRENCY, queue.length) }, async () => {
+      while (queue.length && !failure) {
+        try {
+          await readTile(queue.shift()!);
+        } catch (e) {
+          if (e instanceof DvfTooLongError) timedOut = true;
+          else failure = e;
+          return;
+        }
+      }
+    }),
+  );
+  if (failure) throw failure;
+  if (timedOut) {
+    // Délai atteint : les ventes déjà lues restent utilisables ; sans aucune, on passe à la source de repli.
+    if (!comparables.length) throw new DvfTooLongError();
+    truncated = true;
   }
   return { comparables, truncated };
 }

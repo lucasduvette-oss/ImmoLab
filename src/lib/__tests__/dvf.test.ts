@@ -3,14 +3,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 // Géocodage inverse simulé : l'est du point de départ est sur la commune voisine (Rezé).
 vi.mock("@/lib/geocoding", () => ({
-  reverseCitycode: vi.fn(async (_lat: number, lon: number) => (lon > -1.5652 ? "44143" : "44109")),
+  reverseCommune: vi.fn(async (_lat: number, lon: number) =>
+    lon > -1.5652 ? { citycode: "44143", city: "Rezé" } : { citycode: "44109", city: "Nantes" },
+  ),
 }));
 
 import { ceremaToComparable, findComparablesCerema, geometryCenter, type CeremaFeature } from "@/lib/dvf/cerema";
 import { assertCovered, fetchWithRetry, finalizeComparables, periodStart, readJson, readText, toNumber } from "@/lib/dvf/common";
 import { parseCsv } from "@/lib/dvf/csv";
 import { departmentOf, findComparablesGeoDvf, reduceGeoDvfRows, samplePoints } from "@/lib/dvf/geodvf";
-import { DvfUnavailableError } from "@/lib/dvf/types";
+import { DvfTooLongError, DvfUnavailableError } from "@/lib/dvf/types";
 import { distanceMeters, MAX_COMPARABLES, type Comparable } from "@/lib/estimation";
 
 afterEach(() => {
@@ -132,6 +134,20 @@ describe("API DVF du Cerema", () => {
     await expect(findComparablesCerema(subject)).rejects.toBeInstanceOf(DvfUnavailableError);
   });
 
+  it("garde les ventes déjà lues quand le délai global est atteint", async () => {
+    const deadline = new AbortController();
+    const fetchMock = vi.fn(async () => {
+      deadline.abort(); // le délai expire pendant la lecture de la première page
+      return new Response(JSON.stringify({ features: [feature()], next: "page-2" }), { headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { comparables, truncated } = await findComparablesCerema({ ...subject, radiusM: 300 }, deadline.signal);
+    expect(comparables).toHaveLength(1);
+    expect(truncated).toBe(true);
+    // Sans aucune vente lue : erreur « trop long » (la source de repli prend le relais).
+    await expect(findComparablesCerema({ ...subject, radiusM: 300 }, AbortSignal.abort())).rejects.toBeInstanceOf(DvfTooLongError);
+  });
+
   it("lit les pages successives et convertit les ventes", async () => {
     const pages = [
       { features: [feature()], next: "page-2" },
@@ -237,7 +253,19 @@ describe("fichiers geo-dvf (repli)", () => {
     );
     const { comparables, notes } = await findComparablesGeoDvf({ ...subject, citycode: "44109" });
     expect(comparables).toHaveLength(1);
-    expect(notes.join(" ")).toMatch(/44143/);
+    expect(notes.join(" ")).toMatch(/Ventes 2023 à 2026 non chargées pour Rezé/);
+  });
+
+  it("signale un délai dépassé si la commune du bien n'a pas pu être lue à temps", async () => {
+    // Téléchargement qui ne répond jamais (seul le délai l'interrompt).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new DOMException("délai", "TimeoutError")))),
+      ),
+    );
+    await expect(findComparablesGeoDvf({ ...subject, citycode: "44021" }, 300)).rejects.toBeInstanceOf(DvfTooLongError);
   });
 
   it("échoue si les ventes de la commune du bien sont indisponibles", async () => {

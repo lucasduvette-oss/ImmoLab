@@ -76,20 +76,30 @@ export async function geocodeAddress(address: string): Promise<GeocodedAddress |
 }
 
 /**
- * Géocodage inverse : code INSEE de la commune la plus proche d'un point (ou null).
+ * Géocodage inverse : commune (code INSEE et nom) de l'adresse la plus proche d'un point, ou null.
  * Utilisé pour savoir quelles communes couvre le cercle de recherche des ventes.
+ * `signal` permet d'interrompre la requête (délai global de l'appelant).
  */
-export async function reverseCitycode(latitude: number, longitude: number): Promise<string | null> {
+export async function reverseCommune(
+  latitude: number,
+  longitude: number,
+  signal?: AbortSignal,
+): Promise<{ citycode: string; city: string } | null> {
   const url = new URL(`${baseUrl()}/reverse`);
   url.searchParams.set("lat", String(latitude));
   url.searchParams.set("lon", String(longitude));
   url.searchParams.set("index", "address");
   url.searchParams.set("limit", "1");
+  const timeout = AbortSignal.timeout(5000);
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000), headers: { accept: "application/json" } });
+    const res = await fetch(url, {
+      signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
+      headers: { accept: "application/json" },
+    });
     if (!res.ok) return null;
-    const json = (await res.json()) as { features?: { properties?: { citycode?: string } }[] };
-    return json.features?.[0]?.properties?.citycode ?? null;
+    const json = (await res.json()) as { features?: { properties?: { citycode?: string; city?: string } }[] };
+    const props = json.features?.[0]?.properties;
+    return props?.citycode ? { citycode: props.citycode, city: props.city || props.citycode } : null;
   } catch {
     return null;
   }

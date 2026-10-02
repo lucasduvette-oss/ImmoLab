@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { MAX_COMPARABLES, MAX_PERIOD_YEARS, MAX_RADIUS_M, isInDvfArea, totalAdjustment } from "./estimation";
+import "./zod-fr";
 
 /**
  * Données échangées entre l'écran d'estimation (navigateur) et le serveur.
@@ -13,6 +14,8 @@ const NOT_LOCATED = "Adresse non localisée : choisissez une adresse dans les su
 
 /** Plus grand montant enregistrable (colonnes numeric(12,2)). */
 export const MAX_AMOUNT = 9_999_999_999;
+/** Plus grand prix au m² enregistrable (colonne numeric(10,2)). */
+export const MAX_PRICE_SQM = 99_999_999;
 
 export const subjectSchema = z
   .object({
@@ -31,7 +34,7 @@ export const subjectSchema = z
       .number({ error: "Indiquez la surface habitable." })
       .positive("Indiquez la surface habitable.")
       .max(10000, "Surface habitable trop grande."),
-    rooms: z.number().int().min(0).max(100, "Nombre de pièces trop grand.").nullable(),
+    rooms: z.number().int().min(0, "Nombre de pièces invalide.").max(100, "Nombre de pièces trop grand.").nullable(),
   })
   .refine((s) => isInDvfArea(s.latitude, s.longitude), {
     message: "Adresse hors de la zone couverte par DVF (France métropolitaine, Guadeloupe, Martinique, Guyane, La Réunion).",

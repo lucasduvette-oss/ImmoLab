@@ -1,5 +1,8 @@
 import type { ZodError } from "zod";
 
+import { parseFrenchNumber } from "./format";
+import "./zod-fr";
+
 /**
  * État renvoyé par les Server Actions de formulaire (utilisé avec useActionState).
  * - error : message général affiché en haut du formulaire
@@ -36,8 +39,9 @@ export function str(formData: FormData, name: string): string | null {
 export function num(formData: FormData, name: string): number | null {
   const v = str(formData, name);
   if (v === null) return null;
-  const n = Number(v.replace(/\s/g, "").replace(/\u00a0/g, "").replace(",", "."));
-  return Number.isFinite(n) ? n : NaN;
+  // Même lecture que dans l'estimation : « 350 000 », « 72,5 », « 280.000 »…
+  const n = parseFrenchNumber(v);
+  return n === null ? NaN : n;
 }
 
 /** Case à cocher : cochée → true. */

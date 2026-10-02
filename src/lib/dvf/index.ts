@@ -6,9 +6,9 @@ import { todayISO } from "@/lib/format";
 import { CEREMA_SOURCE, findComparablesCerema } from "./cerema";
 import { assertCovered, finalizeComparables, periodStart, SEARCH_DEADLINE_MS } from "./common";
 import { findComparablesGeoDvf, GEODVF_SOURCE } from "./geodvf";
-import { DvfUnavailableError, type ComparablesResult } from "./types";
+import { DvfTooLongError, DvfUnavailableError, type ComparablesResult } from "./types";
 
-export { DvfUnavailableError, type ComparablesResult } from "./types";
+export { DvfTooLongError, DvfUnavailableError, type ComparablesResult } from "./types";
 
 /**
  * Recherche des ventes comparables DVF.
@@ -25,11 +25,13 @@ export async function findComparables(input: SearchInput): Promise<ComparablesRe
 
   const fromGeoDvf = async () => {
     try {
-      // Délai global propre à la source de repli.
-      const result = await findComparablesGeoDvf(query, AbortSignal.timeout(SEARCH_DEADLINE_MS));
+      // La source de repli gère ses propres délais (recherche des communes, puis téléchargements).
+      const result = await findComparablesGeoDvf(query);
       notes.push(...result.notes);
       return result.comparables;
     } catch (e) {
+      // Délai dépassé : le message (réduire le rayon ou la période) est plus utile que « indisponible ».
+      if (e instanceof DvfTooLongError) throw e;
       if (e instanceof DvfUnavailableError) {
         throw new DvfUnavailableError("Les services de données DVF (Cerema et data.gouv.fr) sont momentanément indisponibles. Réessayez plus tard.");
       }
@@ -45,7 +47,9 @@ export async function findComparables(input: SearchInput): Promise<ComparablesRe
       const result = await findComparablesCerema(query, AbortSignal.timeout(SEARCH_DEADLINE_MS));
       found = result.comparables;
       source = CEREMA_SOURCE;
-      if (result.truncated) notes.push("Zone très dense : toutes les ventes n'ont pas pu être lues, réduisez le rayon ou la période.");
+      if (result.truncated) {
+        notes.push("Toutes les ventes n'ont pas pu être lues (zone très dense ou service lent) : réduisez le rayon ou la période pour un résultat complet.");
+      }
     } catch (e) {
       if (!(e instanceof DvfUnavailableError)) throw e;
       console.warn("API DVF du Cerema indisponible, bascule sur geo-dvf :", e.message);

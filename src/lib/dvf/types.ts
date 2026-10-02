@@ -7,10 +7,24 @@ export type ComparablesResult = {
   notice?: string; // information complémentaire pour l'agent
 };
 
-/** Erreur « service DVF indisponible » : son message est affiché tel quel à l'agent. */
+/**
+ * Erreur « service DVF indisponible » : son message est affiché tel quel à l'agent.
+ * `retryable` : une nouvelle tentative a-t-elle un sens (coupure passagère) ou non (fichier trop lourd) ?
+ */
 export class DvfUnavailableError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly retryable = true,
+  ) {
     super(message);
     this.name = "DvfUnavailableError";
+  }
+}
+
+/** Délai global de la recherche dépassé : le message invite à réduire le rayon ou la période. */
+export class DvfTooLongError extends DvfUnavailableError {
+  constructor() {
+    super("La recherche des ventes DVF prend trop de temps : réduisez le rayon ou la période, puis réessayez.", false);
+    this.name = "DvfTooLongError";
   }
 }
