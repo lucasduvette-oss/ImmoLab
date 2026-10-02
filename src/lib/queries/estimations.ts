@@ -49,7 +49,8 @@ export async function listEstimations(supabase: SupabaseClient, propertyId?: str
   let query = supabase.from("estimations").select(LIST_COLUMNS).order("created_at", { ascending: false }).limit(200);
   if (propertyId) query = query.eq("property_id", propertyId);
   const { data, error } = await query.returns<EstimationListItem[]>();
-  if (error) throw new Error(error.message);
+  // Comme les autres listes : en cas d'erreur (identifiant invalide…), liste vide plutôt qu'une page en erreur.
+  if (error) console.error("Lecture des estimations :", error.message);
   return data ?? [];
 }
 

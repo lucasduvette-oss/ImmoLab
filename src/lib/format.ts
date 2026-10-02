@@ -160,9 +160,14 @@ export function fullName(c: { first_name?: string | null; last_name: string }): 
   return [c.first_name, c.last_name].filter(Boolean).join(" ");
 }
 
-/** Lit un nombre saisi en français (« 72,5 », « 350 000 », « -5 ») ; texte vide ou invalide → null. */
+/**
+ * Lit un nombre saisi en français (« 72,5 », « 350 000 », « 280.000 », « -5 ») ; texte vide ou invalide → null.
+ * Un point suivi de groupes de 3 chiffres est un séparateur de milliers (« 280.000 » = 280 000).
+ */
 export function parseFrenchNumber(value: string): number | null {
-  const cleaned = value.replace(/[\s\u00a0\u202f€%]/g, "").replace(",", ".").replace("−", "-");
+  let cleaned = value.replace(/[\s\u00a0\u202f€%]/g, "").replace("\u2212", "-");
+  if (/^-?\d{1,3}(\.\d{3})+$/.test(cleaned)) cleaned = cleaned.replace(/\./g, "");
+  cleaned = cleaned.replace(",", ".");
   if (cleaned === "" || cleaned === "-") return null;
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;

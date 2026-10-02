@@ -60,5 +60,9 @@ export function dbErrorMessage(error: { message?: string; code?: string } | null
   if (error.code === "23503") return "Élément lié introuvable (il a peut-être été supprimé).";
   if (error.code === "23505") return "Cet élément existe déjà.";
   if (error.code === "42501") return "Accès refusé.";
-  return `Erreur lors de l'enregistrement : ${error.message ?? "inconnue"}`;
+  if (error.code === "23514" || error.code === "22003") return "Une valeur saisie est hors des limites autorisées.";
+  if (error.code === "22P02") return "Une valeur saisie n'a pas le bon format.";
+  // Message technique gardé dans les journaux du serveur (Vercel → Logs), pas affiché à l'agent.
+  console.error("Erreur base de données :", error);
+  return "Erreur lors de l'enregistrement. Réessayez dans quelques instants.";
 }

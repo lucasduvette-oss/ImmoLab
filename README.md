@@ -272,22 +272,32 @@ ou quand vous la transformez en tâche avec le bouton **+ Tâche**.
 
 **Méthode de calcul :**
 1. ventes « classiques » (ni VEFA, ni adjudication, ni échange) d'**un seul** appartement ou d'**une seule** maison
-   (dépendances acceptées), dans le rayon (500 m par défaut), sur la période (3 ans par défaut), avec une surface à ±20 % ;
+   (dépendances acceptées), dans le rayon (500 m par défaut, 3 km au plus), sur la période (3 ans par défaut, 5 ans au plus),
+   avec une surface à ±20 % ; au-delà de 500 ventes, seules les 500 plus proches sont gardées ;
 2. les prix au m² **atypiques** (règle de l'écart interquartile) sont pré-exclus ; vous pouvez exclure ou réintégrer toute vente ;
 3. fourchette **basse / moyenne / haute** = 1er quartile / médiane / 3e quartile des prix au m² × surface × (1 + ajustements) ;
-4. **prix de mise en vente conseillé** = valeur moyenne arrondie au millier (modifiable) ;
-5. **net vendeur** = prix − honoraires. Honoraires en % ou en €, à la charge du vendeur (% du prix)
-   ou de l'acquéreur (% du net vendeur, le prix affiché inclut alors les honoraires).
+4. **prix de mise en vente conseillé** (honoraires inclus, arrondi au millier, modifiable). Les prix DVF sont ceux des actes
+   de vente : ils **incluent** les honoraires payés par le vendeur mais **pas** ceux payés par l'acquéreur. Donc :
+   - honoraires **à la charge du vendeur** : prix conseillé = valeur moyenne ; honoraires = % du prix ;
+   - honoraires **à la charge de l'acquéreur** : la valeur moyenne est le net vendeur ; prix conseillé = valeur moyenne + honoraires
+     (% du net vendeur) ;
+5. **net vendeur** = prix de mise en vente − honoraires (honoraires en % ou en €).
 
 1. Ouvrez un bien (ex. **56 boulevard Guist'hau**), bloc **Estimations** → **Estimer** : le formulaire est pré-rempli
    (type, adresse localisée, surface, pièces).
 2. **Rechercher les ventes comparables** : la carte (OpenStreetMap) et le tableau des ventes s'affichent.
    Touchez un point de la carte ou décochez une ligne pour **exclure** une vente : le résultat se met à jour aussitôt.
+   Sur téléphone, la carte ne bouge pas au doigt (pour pouvoir faire défiler la page) : zoomez avec deux doigts ou les boutons + / −.
+   Un point plus gros réunit plusieurs ventes du même immeuble.
 3. Saisissez des **ajustements** (ex. DPE `-3`, Extérieur `2,5`) et les **honoraires** : la fourchette, le prix conseillé
-   et le net vendeur sont recalculés.
-4. Rédigez l'**argumentaire** puis **Enregistrer l'estimation** : la page de l'estimation s'ouvre ; elle apparaît aussi
+   et le net vendeur sont recalculés. Passez les honoraires « à la charge de l'acquéreur » : le net vendeur devient égal
+   à la valeur moyenne et le prix conseillé augmente du montant des honoraires.
+4. Changez le **rayon** après une recherche : le message « Les critères ont changé » apparaît et l'enregistrement est
+   bloqué jusqu'à une nouvelle recherche (les ventes affichées doivent correspondre aux critères enregistrés).
+5. Rédigez l'**argumentaire** puis **Enregistrer l'estimation** : la page de l'estimation s'ouvre ; elle apparaît aussi
    dans l'historique de la fiche du bien et dans **Plus → Estimations**.
-5. **Modifier** une estimation recharge les ventes enregistrées (copie figée) ; **Relancer la recherche** les met à jour.
+6. **Modifier** une estimation recharge les ventes enregistrées (copie figée) ; **Relancer la recherche** les met à jour.
+   Le prix conseillé suit les nouveaux ajustements, sauf si vous l'aviez saisi vous-même.
 
 ---
 

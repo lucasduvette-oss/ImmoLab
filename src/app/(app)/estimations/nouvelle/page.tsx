@@ -9,6 +9,9 @@ import { EstimationEditor, type EditorInitial } from "../estimation-editor";
 
 export const metadata: Metadata = { title: "Nouvelle estimation" };
 
+// La recherche DVF (action serveur de cette page) peut interroger deux sources successivement.
+export const maxDuration = 120;
+
 /** Nouvelle estimation, pré-remplie depuis une fiche bien si l'adresse contient ?bien=<id>. */
 export default async function NewEstimationPage({ searchParams }: PageProps<"/estimations/nouvelle">) {
   const { bien } = await searchParams;

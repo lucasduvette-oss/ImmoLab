@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 
 import { findComparables, DvfUnavailableError } from "@/lib/dvf";
 import { computeEstimation, type Comparable } from "@/lib/estimation";
-import { estimationPayloadSchema, searchSchema, type EstimationPayload, type SearchInput } from "@/lib/estimation-schema";
+import { MAX_AMOUNT, estimationPayloadSchema, searchSchema, type EstimationPayload, type SearchInput } from "@/lib/estimation-schema";
 import { dbErrorMessage } from "@/lib/form";
 import { requireUser } from "@/lib/supabase/server";
 
@@ -31,15 +32,20 @@ export async function saveEstimation(payload: EstimationPayload): Promise<{ erro
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Données d'estimation invalides." };
   const p = parsed.data;
 
-  // Le résultat est recalculé côté serveur à partir des comparables retenus (on ne fait pas confiance au navigateur).
+  // Le prix au m² de chaque vente et le résultat sont recalculés ici, à partir des prix et surfaces
+  // transmis : les montants enregistrés sont ainsi toujours cohérents avec les ventes retenues.
+  const comparables = p.comparables.map((c) => ({ ...c, pricePerSqm: c.price / c.surface }));
   const result = computeEstimation({
-    comparables: p.comparables,
+    comparables,
     surface: p.surface,
     adjustments: p.adjustments,
     fees: p.fees,
     recommendedOverride: p.recommendedOverride,
   });
   if (!result) return { error: "Retenez au moins une vente comparable." };
+  if ([result.low, result.mid, result.high, result.recommendedPrice, result.feesAmount].some((v) => !(Math.abs(v) <= MAX_AMOUNT))) {
+    return { error: "Les montants calculés sont trop élevés : vérifiez la surface et les ventes retenues." };
+  }
 
   const row = {
     property_id: p.property_id,
@@ -56,7 +62,7 @@ export async function saveEstimation(payload: EstimationPayload): Promise<{ erro
     period_years: p.periodYears,
     surface_tolerance_pct: p.surfaceTolerancePct,
     data_source: p.data_source,
-    comparables: p.comparables,
+    comparables,
     adjustments: p.adjustments,
     comparables_count: result.count,
     median_price_sqm: result.medianPricePerSqm,
@@ -88,6 +94,7 @@ export async function saveEstimation(payload: EstimationPayload): Promise<{ erro
 }
 
 export async function deleteEstimation(estimationId: string) {
+  if (!z.uuid().safeParse(estimationId).success) return { error: "Estimation introuvable." };
   const { supabase } = await requireUser();
   const { error } = await supabase.from("estimations").delete().eq("id", estimationId);
   if (error) return { error: dbErrorMessage(error) };

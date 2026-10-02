@@ -62,6 +62,13 @@ export const DEFAULT_SEARCH = { radiusM: 500, periodYears: 3, surfaceTolerancePc
 /** En dessous de ce nombre de comparables retenus, un avertissement est affiché. */
 export const MIN_COMPARABLES = 5;
 
+/** Nombre maximal de ventes conservées par recherche (les plus proches du bien). */
+export const MAX_COMPARABLES = 500;
+
+/** Bornes du rayon (m) et de la période (années) proposés à l'écran. */
+export const MAX_RADIUS_M = 3000;
+export const MAX_PERIOD_YEARS = 5;
+
 // ------------------------------------------------------------------ Géographie
 
 const EARTH_RADIUS_M = 6_371_000;
@@ -82,6 +89,26 @@ export function boundingBox(lat: number, lon: number, radiusM: number) {
   return { minLat: lat - dLat, maxLat: lat + dLat, minLon: lon - dLon, maxLon: lon + dLon };
 }
 
+/** Nombre maximal de carrés interrogés pour une recherche (un rayon de 3 km en France en demande une vingtaine). */
+export const MAX_TILES = 64;
+
+/**
+ * Zones couvertes par DVF (avec une marge) : France métropolitaine et Corse, Guadeloupe, Martinique,
+ * Guyane, La Réunion. L'Alsace, la Moselle et Mayotte sont exclues plus finement par code commune.
+ */
+const DVF_AREAS = [
+  { minLat: 41, maxLat: 51.5, minLon: -5.5, maxLon: 10 },
+  { minLat: 15.7, maxLat: 16.7, minLon: -62, maxLon: -60.8 },
+  { minLat: 14.2, maxLat: 15, minLon: -61.4, maxLon: -60.7 },
+  { minLat: 2, maxLat: 6, minLon: -55, maxLon: -51.4 },
+  { minLat: -21.5, maxLat: -20.8, minLon: 55.1, maxLon: 56 },
+];
+
+/** Le point est-il dans une zone couverte par DVF ? */
+export function isInDvfArea(lat: number, lon: number): boolean {
+  return DVF_AREAS.some((a) => lat >= a.minLat && lat <= a.maxLat && lon >= a.minLon && lon <= a.maxLon);
+}
+
 /**
  * Découpe un rectangle en carrés d'au plus `maxSize` degrés de côté
  * (l'API DVF limite la taille de la zone interrogée en une requête).
@@ -90,6 +117,8 @@ export function splitBoundingBox(box: ReturnType<typeof boundingBox>, maxSize: n
   const tiles: ReturnType<typeof boundingBox>[] = [];
   const nLat = Math.max(1, Math.ceil((box.maxLat - box.minLat) / maxSize - 1e-9));
   const nLon = Math.max(1, Math.ceil((box.maxLon - box.minLon) / maxSize - 1e-9));
+  // Garde-fou : une zone démesurée (coordonnées aberrantes) ne doit jamais produire des milliers de requêtes.
+  if (!(nLat * nLon <= MAX_TILES)) throw new RangeError("Zone de recherche trop grande.");
   const stepLat = (box.maxLat - box.minLat) / nLat;
   const stepLon = (box.maxLon - box.minLon) / nLon;
   for (let i = 0; i < nLat; i++) {
@@ -160,6 +189,21 @@ export function totalAdjustment(adjustments: Adjustments): number {
 }
 
 /**
+ * Prix de mise en vente proposé par défaut à partir de la valeur issue des ventes DVF.
+ *
+ * Les prix DVF sont ceux des actes de vente : ils incluent les honoraires quand le vendeur les paie,
+ * et ne les incluent pas quand l'acquéreur les paie (le prix de l'acte est alors le net vendeur).
+ * - honoraires à la charge du vendeur : prix de mise en vente = valeur DVF ;
+ * - honoraires à la charge de l'acquéreur : prix de mise en vente = valeur DVF (net vendeur) + honoraires.
+ * Le résultat est arrondi au millier d'euros.
+ */
+export function defaultListingPrice(value: number, fees: Fees): number {
+  if (fees.chargedTo === "vendeur") return roundTo(value);
+  const feesOnNet = fees.mode === "montant" ? fees.value : (value * fees.value) / 100;
+  return roundTo(value + Math.max(0, feesOnNet));
+}
+
+/**
  * Honoraires et net vendeur à partir du prix de mise en vente.
  * - honoraires à la charge du vendeur, en % : % du prix de vente ;
  * - honoraires à la charge de l'acquéreur, en % : % du net vendeur (le prix affiché inclut les honoraires) ;
@@ -175,7 +219,10 @@ export function computeFees(price: number, fees: Fees): { feesAmount: number; ne
   return { feesAmount, netSellerPrice: Math.round(price - feesAmount) };
 }
 
-/** Calcule la fourchette, le prix conseillé et le net vendeur. Renvoie null sans comparable retenu. */
+/**
+ * Calcule la fourchette, le prix conseillé et le net vendeur.
+ * Renvoie null sans comparable retenu ou si les ajustements atteignent −100 %.
+ */
 export function computeEstimation(input: {
   comparables: Pick<Comparable, "pricePerSqm" | "excluded">[];
   surface: number;
@@ -192,11 +239,14 @@ export function computeEstimation(input: {
   const q3 = quantile(sorted, 0.75);
   const adjustmentPct = totalAdjustment(input.adjustments);
   const factor = 1 + adjustmentPct / 100;
+  // Des ajustements de −100 % ou moins donneraient une valeur nulle ou négative.
+  if (!(factor > 0)) return null;
 
   const low = Math.round(q1 * input.surface * factor);
   const mid = Math.round(median * input.surface * factor);
   const high = Math.round(q3 * input.surface * factor);
-  const recommendedPrice = input.recommendedOverride && input.recommendedOverride > 0 ? Math.round(input.recommendedOverride) : roundTo(mid);
+  const recommendedPrice =
+    input.recommendedOverride && input.recommendedOverride > 0 ? Math.round(input.recommendedOverride) : defaultListingPrice(mid, input.fees);
   const { feesAmount, netSellerPrice } = computeFees(recommendedPrice, input.fees);
 
   return {

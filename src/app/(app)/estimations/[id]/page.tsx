@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BuildingIcon, MapPinIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { AlertTriangleIcon, BuildingIcon, MapPinIcon, PencilIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PageHeader } from "@/components/page-header";
 import { ComparablesMapLazy } from "@/components/estimation/comparables-map-lazy";
-import { ADJUSTMENT_LABELS, type Adjustments } from "@/lib/estimation";
+import { ADJUSTMENT_LABELS, MIN_COMPARABLES, type Adjustments } from "@/lib/estimation";
 import { formatDate, formatEuros, formatEurosPerSqm, formatNumber, formatPercent, formatSurface } from "@/lib/format";
 import { propertyAddress } from "@/lib/property";
 import { getEstimation } from "@/lib/queries/estimations";
@@ -79,15 +79,26 @@ export default async function EstimationPage({ params }: PageProps<"/estimations
             )}
           </CardHeader>
           <CardContent className="grid gap-3">
+            {e.comparables_count < MIN_COMPARABLES && (
+              <p className="flex items-start gap-2 rounded-md bg-warning/20 px-3 py-2 text-sm text-amber-900">
+                <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
+                Seulement {e.comparables_count} vente{e.comparables_count > 1 ? "s" : ""} retenue{e.comparables_count > 1 ? "s" : ""} (moins de{" "}
+                {MIN_COMPARABLES}) : résultat peu fiable.
+              </p>
+            )}
             <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Tile label="Prix médian au m²" value={formatEurosPerSqm(e.median_price_sqm)} />
               <Tile label="Fourchette basse" value={formatEuros(e.low_value)} />
               <Tile label="Fourchette moyenne" value={formatEuros(e.mid_value)} className="bg-accent" />
               <Tile label="Fourchette haute" value={formatEuros(e.high_value)} />
             </dl>
+            <p className="text-xs text-muted-foreground">
+              Basse / moyenne / haute : 1er quartile, médiane et 3e quartile des prix au m² des ventes retenues × {formatSurface(e.surface)}
+              {totalAdj !== 0 && <> × ajustements ({formatPercent(totalAdj)})</>}.
+            </p>
             <dl className="grid gap-2 sm:grid-cols-3">
               <Tile
-                label={`Prix de mise en vente${e.fees_charged_to === "acquereur" ? " (honoraires inclus)" : ""}`}
+                label="Prix de mise en vente (honoraires inclus)"
                 value={formatEuros(e.recommended_price)}
                 strong
                 className="border-2 border-primary bg-card"

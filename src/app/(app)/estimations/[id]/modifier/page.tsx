@@ -2,12 +2,15 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
-import { NO_ADJUSTMENTS } from "@/lib/estimation";
+import { NO_ADJUSTMENTS, computeEstimation, type Fees } from "@/lib/estimation";
 import { getEstimation } from "@/lib/queries/estimations";
 import { requireUser } from "@/lib/supabase/server";
 import { EstimationEditor } from "../../estimation-editor";
 
 export const metadata: Metadata = { title: "Modifier l'estimation" };
+
+// La recherche DVF (action serveur de cette page) peut interroger deux sources successivement.
+export const maxDuration = 120;
 
 /** Reprise d'une estimation enregistrée (les comparables figés sont rechargés tels quels). */
 export default async function EditEstimationPage({ params }: PageProps<"/estimations/[id]/modifier">) {
@@ -15,6 +18,13 @@ export default async function EditEstimationPage({ params }: PageProps<"/estimat
   const { supabase } = await requireUser();
   const e = await getEstimation(supabase, id);
   if (!e) notFound();
+
+  const adjustments = { ...NO_ADJUSTMENTS, ...e.adjustments };
+  const fees: Fees = { mode: e.fees_mode, value: e.fees_value, chargedTo: e.fees_charged_to };
+  // Le prix conseillé enregistré n'est repris comme saisie manuelle que s'il diffère du prix calculé :
+  // sinon, il doit suivre les nouveaux ajustements ou une nouvelle recherche.
+  const computed = computeEstimation({ comparables: e.comparables, surface: e.surface, adjustments, fees });
+  const recommendedOverride = e.recommended_price !== null && e.recommended_price !== computed?.recommendedPrice ? e.recommended_price : null;
 
   return (
     <>
@@ -37,10 +47,9 @@ export default async function EditEstimationPage({ params }: PageProps<"/estimat
           params: { radiusM: e.radius_m, periodYears: e.period_years, surfaceTolerancePct: e.surface_tolerance_pct },
           comparables: e.comparables,
           dataSource: e.data_source,
-          adjustments: { ...NO_ADJUSTMENTS, ...e.adjustments },
-          fees: { mode: e.fees_mode, value: e.fees_value, chargedTo: e.fees_charged_to },
-          // Le prix conseillé enregistré est conservé s'il différait de la valeur calculée.
-          recommendedOverride: e.recommended_price,
+          adjustments,
+          fees,
+          recommendedOverride,
           arguments: e.arguments ?? "",
         }}
       />

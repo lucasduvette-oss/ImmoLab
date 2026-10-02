@@ -4,7 +4,7 @@ import type { Comparable } from "@/lib/estimation";
 import type { SearchInput } from "@/lib/estimation-schema";
 import { todayISO } from "@/lib/format";
 import { CEREMA_SOURCE, findComparablesCerema } from "./cerema";
-import { assertCovered, finalizeComparables, periodStart } from "./common";
+import { assertCovered, finalizeComparables, periodStart, SEARCH_DEADLINE_MS } from "./common";
 import { findComparablesGeoDvf, GEODVF_SOURCE } from "./geodvf";
 import { DvfUnavailableError, type ComparablesResult } from "./types";
 
@@ -25,7 +25,10 @@ export async function findComparables(input: SearchInput): Promise<ComparablesRe
 
   const fromGeoDvf = async () => {
     try {
-      return await findComparablesGeoDvf(query);
+      // Délai global propre à la source de repli.
+      const result = await findComparablesGeoDvf(query, AbortSignal.timeout(SEARCH_DEADLINE_MS));
+      notes.push(...result.notes);
+      return result.comparables;
     } catch (e) {
       if (e instanceof DvfUnavailableError) {
         throw new DvfUnavailableError("Les services de données DVF (Cerema et data.gouv.fr) sont momentanément indisponibles. Réessayez plus tard.");
@@ -39,16 +42,16 @@ export async function findComparables(input: SearchInput): Promise<ComparablesRe
     source = GEODVF_SOURCE;
   } else {
     try {
-      const result = await findComparablesCerema(query);
+      const result = await findComparablesCerema(query, AbortSignal.timeout(SEARCH_DEADLINE_MS));
       found = result.comparables;
       source = CEREMA_SOURCE;
       if (result.truncated) notes.push("Zone très dense : toutes les ventes n'ont pas pu être lues, réduisez le rayon ou la période.");
     } catch (e) {
       if (!(e instanceof DvfUnavailableError)) throw e;
       console.warn("API DVF du Cerema indisponible, bascule sur geo-dvf :", e.message);
+      notes.push("Le service DVF du Cerema ne répond pas : les ventes proviennent des fichiers DVF géolocalisés de data.gouv.fr.");
       found = await fromGeoDvf();
       source = GEODVF_SOURCE;
-      notes.push("Le service DVF du Cerema ne répond pas : les ventes proviennent des fichiers DVF géolocalisés de data.gouv.fr.");
     }
   }
 

@@ -2,7 +2,7 @@ import "server-only";
 
 import { boundingBox, distanceMeters, splitBoundingBox, type Comparable, type EstimationPropertyType } from "@/lib/estimation";
 import type { SearchInput } from "@/lib/estimation-schema";
-import { fetchWithRetry, MIN_SALE_PRICE, normalizeLabel, toNumber } from "./common";
+import { fetchWithRetry, MIN_SALE_PRICE, normalizeLabel, readJson, toNumber } from "./common";
 import { DvfUnavailableError } from "./types";
 
 /**
@@ -34,28 +34,58 @@ function baseUrl() {
 type Geometry = { type?: string; coordinates?: unknown } | null | undefined;
 export type CeremaFeature = { id?: unknown; geometry?: Geometry; properties?: Record<string, unknown> };
 
-/** Centre des parcelles d'une vente (moyenne des sommets, suffisant à l'échelle d'une parcelle). */
-export function geometryCenter(geometry: Geometry): { latitude: number; longitude: number } | null {
-  if (!geometry?.coordinates) return null;
-  let sumLon = 0;
-  let sumLat = 0;
-  let n = 0;
-  const isPosition = (c: unknown): c is [number, number] => Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number";
-  const visit = (c: unknown) => {
-    if (isPosition(c)) {
-      sumLon += c[0];
-      sumLat += c[1];
-      n++;
-    } else if (Array.isArray(c) && c.length && isPosition(c[0])) {
-      // Contour de polygone : le dernier sommet répète le premier, on ne le compte qu'une fois.
-      const ring = c as [number, number][];
-      const last = ring[ring.length - 1];
-      const closed = ring.length > 1 && last[0] === ring[0][0] && last[1] === ring[0][1];
-      (closed ? ring.slice(0, -1) : ring).forEach(visit);
-    } else if (Array.isArray(c)) c.forEach(visit);
+type Position = [number, number];
+const isPosition = (c: unknown): c is Position => Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number";
+
+/** Centre d'un contour (moyenne des sommets ; le dernier sommet répète le premier, on ne le compte qu'une fois). */
+function ringCenter(ring: Position[]): { latitude: number; longitude: number } | null {
+  const last = ring[ring.length - 1];
+  const closed = ring.length > 1 && last[0] === ring[0][0] && last[1] === ring[0][1];
+  const points = closed ? ring.slice(0, -1) : ring;
+  if (!points.length) return null;
+  return {
+    longitude: points.reduce((s, p) => s + p[0], 0) / points.length,
+    latitude: points.reduce((s, p) => s + p[1], 0) / points.length,
   };
-  visit(geometry.coordinates);
-  return n ? { latitude: sumLat / n, longitude: sumLon / n } : null;
+}
+
+/**
+ * Centre de chaque parcelle d'une vente (contour extérieur de chaque polygone ; suffisant à l'échelle d'une parcelle).
+ * Accepte Polygon et MultiPolygon.
+ */
+export function parcelCenters(geometry: Geometry): { latitude: number; longitude: number }[] {
+  const coordinates = geometry?.coordinates;
+  if (!Array.isArray(coordinates) || !coordinates.length) return [];
+  // Polygon : [contour][sommet] ; MultiPolygon : [polygone][contour][sommet].
+  const polygons = (isPosition((coordinates as unknown[][])[0]?.[0]) ? [coordinates] : coordinates) as unknown[];
+  const centers: { latitude: number; longitude: number }[] = [];
+  for (const polygon of polygons) {
+    const outer = Array.isArray(polygon) ? polygon[0] : null;
+    if (!Array.isArray(outer) || !outer.every(isPosition)) continue;
+    const center = ringCenter(outer as Position[]);
+    if (center) centers.push(center);
+  }
+  return centers;
+}
+
+/**
+ * Position retenue pour une vente : la parcelle la plus proche du bien estimé
+ * (une vente peut réunir une parcelle bâtie et un terrain éloigné).
+ */
+export function geometryCenter(geometry: Geometry, near?: { latitude: number; longitude: number }) {
+  const centers = parcelCenters(geometry);
+  if (!centers.length) return null;
+  if (!near) return centers[0];
+  let best = centers[0];
+  let bestDistance = Infinity;
+  for (const c of centers) {
+    const d = distanceMeters(near.latitude, near.longitude, c.latitude, c.longitude);
+    if (d < bestDistance) {
+      best = c;
+      bestDistance = d;
+    }
+  }
+  return best;
 }
 
 /** Nombre de pièces principales d'après les compteurs nbapt1pp…nbapt5pp / nbmai1pp…nbmai5pp (5 = « 5 ou plus »). */
@@ -97,14 +127,14 @@ export function ceremaToComparable(
   const tolerance = input.surfaceTolerancePct / 100;
   if (surface < input.surface * (1 - tolerance) || surface > input.surface * (1 + tolerance)) return null;
 
-  const center = geometryCenter(feature.geometry);
+  const center = geometryCenter(feature.geometry, input);
   if (!center) return null;
   const distance = distanceMeters(input.latitude, input.longitude, center.latitude, center.longitude);
   if (distance > input.radiusM) return null;
 
+  // L'API ne donne que le code INSEE de la commune : on n'affiche le nom que s'il s'agit de celle du bien.
   const communes = Array.isArray(p.l_codinsee) ? (p.l_codinsee as unknown[]).map(String) : [];
-  const label =
-    input.citycode && communes.includes(input.citycode) && input.city ? input.city : communes.length ? `Commune ${communes.join(", ")}` : null;
+  const label = input.citycode && communes.includes(input.citycode) && input.city ? input.city : null;
 
   return {
     id: `cerema-${String(p.idmutinvar ?? p.idopendata ?? feature.id ?? `${date}-${price}-${surface}`)}`,
@@ -124,26 +154,38 @@ export function ceremaToComparable(
   };
 }
 
-async function fetchPage(url: string): Promise<{ features: CeremaFeature[]; hasNext: boolean }> {
+/** Taille maximale d'une page de l'API (500 ventes avec leurs parcelles). */
+const MAX_PAGE_BYTES = 40 * 1024 * 1024;
+/** Nombre maximal de pages lues pour une recherche, tous carreaux confondus. */
+const MAX_PAGES_PER_SEARCH = 40;
+
+async function fetchPage(url: string, deadline?: AbortSignal): Promise<{ features: CeremaFeature[]; hasNext: boolean }> {
   const res = await fetchWithRetry(url, {
     headers: { accept: "application/json", "user-agent": "ImmoLab/1.0 (estimation immobiliere)" },
     timeoutMs: 15_000,
     cache: "no-store",
+    deadline,
   });
   if (!res.ok) throw new DvfUnavailableError(`Le service DVF du Cerema a refusé la requête (${res.status}).`);
   if (!(res.headers.get("content-type") ?? "").includes("json")) {
     throw new DvfUnavailableError("Le service DVF du Cerema a renvoyé une réponse inattendue.");
   }
-  const json = (await res.json()) as { features?: CeremaFeature[]; next?: string | null };
-  return { features: Array.isArray(json.features) ? json.features : [], hasNext: Boolean(json.next) };
+  const json = await readJson<{ features?: unknown; next?: string | null }>(res, MAX_PAGE_BYTES);
+  // Sans liste de ventes, la réponse n'est pas celle attendue (message d'erreur, format modifié…).
+  if (!Array.isArray(json.features)) throw new DvfUnavailableError("Le service DVF du Cerema a renvoyé une réponse inattendue.");
+  return { features: json.features as CeremaFeature[], hasNext: Boolean(json.next) };
 }
 
 /** Ventes comparables autour du bien d'après l'API du Cerema. */
-export async function findComparablesCerema(input: SearchInput & { minDate: string }): Promise<{ comparables: Comparable[]; truncated: boolean }> {
+export async function findComparablesCerema(
+  input: SearchInput & { minDate: string },
+  deadline?: AbortSignal,
+): Promise<{ comparables: Comparable[]; truncated: boolean }> {
   const tiles = splitBoundingBox(boundingBox(input.latitude, input.longitude, input.radiusM), MAX_TILE_DEGREES);
   const tolerance = input.surfaceTolerancePct / 100;
   const comparables: Comparable[] = [];
   let truncated = false;
+  let pagesRead = 0;
 
   for (const tile of tiles) {
     const params = new URLSearchParams({
@@ -157,8 +199,13 @@ export async function findComparablesCerema(input: SearchInput & { minDate: stri
       page_size: String(PAGE_SIZE),
     });
     for (let page = 1; page <= MAX_PAGES_PER_TILE; page++) {
+      if (pagesRead >= MAX_PAGES_PER_SEARCH) {
+        truncated = true;
+        break;
+      }
       params.set("page", String(page));
-      const { features, hasNext } = await fetchPage(`${baseUrl()}/dvf_opendata/geomutations/?${params.toString()}`);
+      const { features, hasNext } = await fetchPage(`${baseUrl()}/dvf_opendata/geomutations/?${params.toString()}`, deadline);
+      pagesRead++;
       for (const f of features) {
         const c = ceremaToComparable(f, input);
         if (c) comparables.push(c);

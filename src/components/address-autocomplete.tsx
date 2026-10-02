@@ -52,6 +52,8 @@ export function AddressAutocomplete({
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const skipNextSearch = useRef(true);
+  // Incrémenté pour relancer la recherche de suggestions sans nouvelle frappe (adresse pré-remplie non localisée).
+  const [lookupRequest, setLookupRequest] = useState(0);
 
   // Recherche des suggestions 300 ms après la dernière frappe.
   useEffect(() => {
@@ -79,7 +81,7 @@ export function AddressAutocomplete({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [address, postalCode, city]);
+  }, [address, postalCode, city, lookupRequest]);
 
   function choose(s: GeocodedAddress) {
     skipNextSearch.current = true;
@@ -123,7 +125,11 @@ export function AddressAutocomplete({
             name="address"
             value={address}
             onChange={edit("address", setAddress)}
-            onFocus={() => suggestions.length && setOpen(true)}
+            onFocus={() => {
+              if (suggestions.length) setOpen(true);
+              // Adresse pré-remplie mais pas encore localisée : on propose tout de suite des suggestions.
+              else if (!coords) setLookupRequest((n) => n + 1);
+            }}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             autoComplete="off"
             placeholder="ex. 12 rue Crébillon"

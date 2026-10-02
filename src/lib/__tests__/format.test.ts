@@ -8,6 +8,7 @@ import {
   formatPhone,
   parisDayRange,
   parisLocalToUTC,
+  parseFrenchNumber,
   utcToParisLocal,
 } from "@/lib/format";
 import { normalizeSearch } from "@/lib/search";
@@ -63,5 +64,25 @@ describe("recherche", () => {
   });
   it("neutralise les jokers SQL", () => {
     expect(normalizeSearch("50%_x")).toBe("50 x");
+  });
+});
+
+describe("saisie de nombres", () => {
+  it("lit les nombres écrits à la française", () => {
+    expect(parseFrenchNumber("72,5")).toBe(72.5);
+    expect(parseFrenchNumber("350 000")).toBe(350000);
+    expect(parseFrenchNumber("350\u202f000 €")).toBe(350000);
+    expect(parseFrenchNumber("-5")).toBe(-5);
+    expect(parseFrenchNumber("\u22123")).toBe(-3);
+    expect(parseFrenchNumber("65.5")).toBe(65.5);
+  });
+  it("comprend le point comme séparateur de milliers", () => {
+    expect(parseFrenchNumber("280.000")).toBe(280000);
+    expect(parseFrenchNumber("1.250.000")).toBe(1250000);
+  });
+  it("renvoie null pour une saisie vide ou invalide", () => {
+    expect(parseFrenchNumber("")).toBeNull();
+    expect(parseFrenchNumber("-")).toBeNull();
+    expect(parseFrenchNumber("abc")).toBeNull();
   });
 });

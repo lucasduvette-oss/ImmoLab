@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { unstable_rethrow } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangleIcon, Loader2Icon, MapIcon, SaveIcon, SearchIcon } from "lucide-react";
 
@@ -17,6 +18,7 @@ import {
   ADJUSTMENT_LABELS,
   MIN_COMPARABLES,
   computeEstimation,
+  totalAdjustment,
   type Adjustments,
   type Comparable,
   type EstimationPropertyType,
@@ -25,7 +27,6 @@ import {
 import { formatDate, formatEuros, formatEurosPerSqm, formatNumber, formatPercent, formatSurface, parseFrenchNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { saveEstimation, searchComparables } from "./actions";
-
 
 export type EditorInitial = {
   id: string | null;
@@ -51,6 +52,19 @@ function NumberInput({ value, onChange, ...props }: Omit<React.ComponentProps<ty
 
 const str = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(n).replace(".", ","));
 
+/** Empreinte des critères d'une recherche : si elle change, les ventes affichées ne correspondent plus. */
+function criteriaKey(
+  type: EstimationPropertyType,
+  latitude: number | null,
+  longitude: number | null,
+  surface: number | null,
+  params: EditorInitial["params"],
+) {
+  return JSON.stringify([type, latitude, longitude, surface, params.radiusM, params.periodYears, params.surfaceTolerancePct]);
+}
+
+const NETWORK_ERROR = "Connexion impossible avec le serveur : vos saisies sont conservées, réessayez dans un instant.";
+
 /** Écran d'estimation : saisie du bien, recherche DVF, sélection des comparables, ajustements, résultat. */
 export function EstimationEditor({ initial }: { initial: EditorInitial }) {
   const [type, setType] = useState<EstimationPropertyType>(initial.subject.type);
@@ -60,7 +74,12 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
   const [params, setParams] = useState(initial.params);
   const [comparables, setComparables] = useState<Comparable[]>(initial.comparables);
   const [dataSource, setDataSource] = useState(initial.dataSource);
-  const [searchedKey, setSearchedKey] = useState<string | null>(initial.comparables.length ? "initial" : null);
+  // Une estimation reprise part de la recherche enregistrée : ses critères sont ceux de départ.
+  const [searchedKey, setSearchedKey] = useState<string | null>(
+    initial.comparables.length
+      ? criteriaKey(initial.subject.type, initial.subject.latitude, initial.subject.longitude, initial.subject.surface, initial.params)
+      : null,
+  );
   const [notice, setNotice] = useState<string | null>(null);
   const [adjText, setAdjText] = useState<Record<keyof Adjustments, string>>(
     Object.fromEntries(Object.entries(initial.adjustments).map(([k, v]) => [k, v ? str(v) : ""])) as Record<keyof Adjustments, string>,
@@ -82,8 +101,9 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
   const recommendedOverride = parseFrenchNumber(recommendedText);
 
   // Les paramètres ont-ils changé depuis la dernière recherche ?
-  const searchKey = JSON.stringify([type, address.latitude, address.longitude, surface, params]);
-  const stale = searchedKey !== null && searchedKey !== "initial" && searchedKey !== searchKey;
+  const searchKey = criteriaKey(type, address.latitude, address.longitude, surface, params);
+  const stale = searchedKey !== null && searchedKey !== searchKey;
+  const adjustmentsTooLow = totalAdjustment(adjustments) <= -100;
 
   // Calcul instantané (quelques dizaines de ventes) : refait à chaque modification.
   const result = surface ? computeEstimation({ comparables, surface, adjustments, fees, recommendedOverride }) : null;
@@ -93,19 +113,27 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
   function search() {
     if (!located) return toast.error("Choisissez une adresse dans les suggestions pour la localiser.");
     if (!surface) return toast.error("Indiquez la surface habitable du bien.");
+    toast.dismiss();
     startSearch(async () => {
-      const res = await searchComparables({
-        type,
-        address: address.address || null,
-        postal_code: address.postal_code || null,
-        city: address.city || null,
-        citycode: address.citycode || null,
-        latitude: address.latitude!,
-        longitude: address.longitude!,
-        surface,
-        rooms: rooms !== null ? Math.round(rooms) : null,
-        ...params,
-      });
+      let res: Awaited<ReturnType<typeof searchComparables>>;
+      try {
+        res = await searchComparables({
+          type,
+          address: address.address || null,
+          postal_code: address.postal_code || null,
+          city: address.city || null,
+          citycode: address.citycode || null,
+          latitude: address.latitude!,
+          longitude: address.longitude!,
+          surface,
+          rooms: rooms !== null ? Math.round(rooms) : null,
+          ...params,
+        });
+      } catch {
+        // Réseau coupé, délai dépassé… : l'écran et les saisies restent en place.
+        toast.error(NETWORK_ERROR);
+        return;
+      }
       if ("error" in res) {
         toast.error(res.error);
         return;
@@ -125,28 +153,38 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
 
   function save() {
     if (!located || !surface) return toast.error("Le bien doit être localisé et avoir une surface.");
+    if (stale) return toast.error("Les critères ont changé : relancez la recherche avant d'enregistrer.");
     if (!result) return toast.error("Recherchez et retenez au moins une vente comparable avant d'enregistrer.");
+    toast.dismiss();
     startSave(async () => {
-      const res = await saveEstimation({
-        id: initial.id,
-        property_id: initial.propertyId,
-        type,
-        address: address.address || null,
-        postal_code: address.postal_code || null,
-        city: address.city || null,
-        citycode: address.citycode || null,
-        latitude: address.latitude!,
-        longitude: address.longitude!,
-        surface,
-        rooms: rooms !== null ? Math.round(rooms) : null,
-        ...params,
-        data_source: dataSource,
-        comparables,
-        adjustments,
-        fees,
-        recommendedOverride: recommendedOverride && recommendedOverride > 0 ? recommendedOverride : null,
-        arguments: argumentsText.trim() || null,
-      });
+      let res: Awaited<ReturnType<typeof saveEstimation>>;
+      try {
+        res = await saveEstimation({
+          id: initial.id,
+          property_id: initial.propertyId,
+          type,
+          address: address.address || null,
+          postal_code: address.postal_code || null,
+          city: address.city || null,
+          citycode: address.citycode || null,
+          latitude: address.latitude!,
+          longitude: address.longitude!,
+          surface,
+          rooms: rooms !== null ? Math.round(rooms) : null,
+          ...params,
+          data_source: dataSource,
+          comparables,
+          adjustments,
+          fees,
+          recommendedOverride: recommendedOverride && recommendedOverride > 0 ? recommendedOverride : null,
+          arguments: argumentsText.trim() || null,
+        });
+      } catch (e) {
+        // La redirection vers la page de l'estimation (après enregistrement) passe aussi par ici : on la laisse faire.
+        unstable_rethrow(e);
+        toast.error(NETWORK_ERROR);
+        return;
+      }
       if (res && "error" in res) toast.error(res.error);
     });
   }
@@ -268,7 +306,7 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
                     {sorted.map((c) => (
                       <tr key={c.id} className={cn("border-b last:border-0", c.excluded && "text-muted-foreground")}>
                         <td className="px-2 py-2">
-                          <label className="flex items-center gap-2">
+                          <label className="-my-2 flex min-h-10 min-w-10 cursor-pointer items-center gap-2">
                             <input
                               type="checkbox"
                               checked={!c.excluded}
@@ -305,10 +343,20 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             {(Object.keys(ADJUSTMENT_LABELS) as (keyof Adjustments)[]).map((k) => (
               <Field key={k} label={`${ADJUSTMENT_LABELS[k]} (%)`} htmlFor={`adj-${k}`}>
-                <NumberInput id={`adj-${k}`} value={adjText[k]} onChange={(v) => setAdjText({ ...adjText, [k]: v })} placeholder="0" />
+                {/* Clavier complet : le pavé décimal de l'iPhone n'a pas de signe « - ». */}
+                <NumberInput
+                  id={`adj-${k}`}
+                  inputMode="text"
+                  value={adjText[k]}
+                  onChange={(v) => setAdjText({ ...adjText, [k]: v })}
+                  placeholder="0"
+                />
               </Field>
             ))}
           </div>
+          {adjustmentsTooLow && (
+            <p className="mt-3 text-sm text-destructive">Le total des ajustements doit rester supérieur à -100 %.</p>
+          )}
         </CardContent>
       </Card>
 
@@ -319,7 +367,11 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
         </CardHeader>
         <CardContent className="grid gap-4">
           {!result ? (
-            <p className="text-sm text-muted-foreground">Le résultat s&apos;affiche dès qu&apos;au moins une vente comparable est retenue.</p>
+            <p className="text-sm text-muted-foreground">
+              {adjustmentsTooLow
+                ? "Corrigez les ajustements pour afficher le résultat."
+                : "Le résultat s'affiche dès qu'au moins une vente comparable est retenue."}
+            </p>
           ) : (
             <>
               {result.lowConfidence && (
@@ -348,12 +400,21 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
                 </div>
               </dl>
               <p className="text-xs text-muted-foreground">
-                Basse / moyenne / haute : 1er quartile, médiane et 3e quartile des prix au m² des {result.count} ventes retenues × {formatSurface(surface)}
+                Basse / moyenne / haute : 1er quartile, médiane et 3e quartile des prix au m²{" "}
+                {result.count > 1 ? `des ${result.count} ventes retenues` : "de la seule vente retenue"} × {formatSurface(surface)}
                 {result.adjustmentPct !== 0 && <> × ajustements ({formatPercent(result.adjustmentPct)})</>}.
               </p>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Prix de mise en vente conseillé (€)" htmlFor="recommended" hint="Laissez vide pour reprendre la valeur moyenne arrondie.">
+                <Field
+                  label="Prix de mise en vente conseillé (€)"
+                  htmlFor="recommended"
+                  hint={
+                    feesChargedTo === "acquereur"
+                      ? "Laissez vide pour reprendre la valeur moyenne + honoraires, arrondie au millier."
+                      : "Laissez vide pour reprendre la valeur moyenne, arrondie au millier."
+                  }
+                >
                   <NumberInput id="recommended" value={recommendedText} onChange={setRecommendedText} placeholder={formatNumber(result.recommendedPrice)} />
                 </Field>
                 <div className="grid grid-cols-[1fr_6rem] gap-2">
@@ -367,7 +428,7 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
                     </NativeSelect>
                   </Field>
                 </div>
-                <Field label="Honoraires à la charge de" htmlFor="fees-charged">
+                <Field label="Honoraires à la charge" htmlFor="fees-charged">
                   <NativeSelect id="fees-charged" value={feesChargedTo} onChange={(e) => setFeesChargedTo(e.target.value as Fees["chargedTo"])}>
                     <option value="vendeur">du vendeur</option>
                     <option value="acquereur">de l&apos;acquéreur</option>
@@ -377,7 +438,7 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
 
               <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div className="rounded-lg border-2 border-primary px-3 py-2">
-                  <dt className="text-xs text-muted-foreground">Prix de mise en vente{feesChargedTo === "acquereur" ? " (honoraires inclus)" : ""}</dt>
+                  <dt className="text-xs text-muted-foreground">Prix de mise en vente (honoraires inclus)</dt>
                   <dd className="text-xl font-bold text-primary">{formatEuros(result.recommendedPrice)}</dd>
                 </div>
                 <div className="rounded-lg bg-muted/60 px-3 py-2">
@@ -389,6 +450,12 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
                   <dd className="text-xl font-bold text-success">{formatEuros(result.netSellerPrice)}</dd>
                 </div>
               </dl>
+              <p className="text-xs text-muted-foreground">
+                Les prix DVF sont ceux des actes de vente : ils incluent les honoraires payés par le vendeur, mais pas ceux payés
+                par l&apos;acquéreur. {feesChargedTo === "acquereur"
+                  ? "Honoraires à la charge de l'acquéreur : la valeur moyenne correspond au net vendeur, les honoraires s'y ajoutent."
+                  : "Honoraires à la charge du vendeur : la valeur moyenne correspond au prix de mise en vente, honoraires compris."}
+              </p>
             </>
           )}
         </CardContent>
@@ -411,8 +478,12 @@ export function EstimationEditor({ initial }: { initial: EditorInitial }) {
         </CardContent>
       </Card>
 
-      <div className="sticky bottom-20 z-10 flex justify-end md:bottom-4">
-        <Button type="button" size="lg" onClick={save} disabled={saving || !result} className="w-full shadow-lg sm:w-auto">
+      {/* Au-dessus de la barre de navigation du téléphone (y compris la zone du geste « accueil » de l'iPhone). */}
+      <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex flex-col items-end gap-1 md:bottom-4">
+        {stale && result && (
+          <p className="rounded-md bg-card px-2 py-1 text-xs text-amber-700 shadow-sm">Relancez la recherche avant d&apos;enregistrer.</p>
+        )}
+        <Button type="button" size="lg" onClick={save} disabled={saving || !result || stale} className="w-full shadow-lg sm:w-auto">
           {saving ? <Loader2Icon className="animate-spin" /> : <SaveIcon />}
           {saving ? "Enregistrement…" : initial.id ? "Enregistrer les modifications" : "Enregistrer l'estimation"}
         </Button>

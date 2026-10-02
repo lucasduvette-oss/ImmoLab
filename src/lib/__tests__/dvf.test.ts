@@ -1,12 +1,21 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+// Géocodage inverse simulé : l'est du point de départ est sur la commune voisine (Rezé).
+vi.mock("@/lib/geocoding", () => ({
+  reverseCitycode: vi.fn(async (_lat: number, lon: number) => (lon > -1.5652 ? "44143" : "44109")),
+}));
 
-import { ceremaToComparable, geometryCenter, type CeremaFeature } from "@/lib/dvf/cerema";
-import { assertCovered, finalizeComparables, periodStart, toNumber } from "@/lib/dvf/common";
+import { ceremaToComparable, findComparablesCerema, geometryCenter, type CeremaFeature } from "@/lib/dvf/cerema";
+import { assertCovered, fetchWithRetry, finalizeComparables, periodStart, readJson, readText, toNumber } from "@/lib/dvf/common";
 import { parseCsv } from "@/lib/dvf/csv";
-import { departmentOf, reduceGeoDvfRows } from "@/lib/dvf/geodvf";
-import type { Comparable } from "@/lib/estimation";
+import { departmentOf, findComparablesGeoDvf, reduceGeoDvfRows, samplePoints } from "@/lib/dvf/geodvf";
+import { DvfUnavailableError } from "@/lib/dvf/types";
+import { distanceMeters, MAX_COMPARABLES, type Comparable } from "@/lib/estimation";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const subject = {
   type: "appartement" as const,
@@ -94,6 +103,46 @@ describe("API DVF du Cerema", () => {
     const c = geometryCenter(square(-1.5, 47.2) as never)!;
     expect(c.longitude).toBeCloseTo(-1.5, 6);
     expect(c.latitude).toBeCloseTo(47.2, 6);
+    // Polygon simple (et non MultiPolygon)
+    const polygon = { type: "Polygon", coordinates: square(-1.5, 47.2).coordinates[0] };
+    expect(geometryCenter(polygon as never)!.latitude).toBeCloseTo(47.2, 6);
+  });
+
+  it("place une vente sur sa parcelle la plus proche (parcelle bâtie + terrain éloigné)", () => {
+    // Petite parcelle près du bien + grand terrain (beaucoup de sommets) à ~3 km.
+    const farLon = -1.525;
+    const far = Array.from({ length: 120 }, (_, i) => [farLon + 0.001 * Math.cos(i / 19), 47.218 + 0.001 * Math.sin(i / 19)]);
+    const geometry = { type: "MultiPolygon", coordinates: [square(-1.566, 47.218).coordinates[0], [[...far, far[0]]]] };
+    const c = ceremaToComparable(feature({}, geometry), subject);
+    expect(c).not.toBeNull();
+    expect(c!.distance).toBeLessThan(200);
+    expect(c!.longitude).toBeCloseTo(-1.566, 4);
+  });
+
+  it("n'affiche le nom de commune que pour celle du bien", () => {
+    expect(ceremaToComparable(feature(), subject)!.label).toBe("Nantes");
+    expect(ceremaToComparable(feature({ l_codinsee: ["44143"] }), subject)!.label).toBeNull();
+  });
+
+  it("bascule vers le repli si la réponse n'est pas une liste de ventes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ detail: "Limite atteinte" }), { headers: { "content-type": "application/json" } })),
+    );
+    await expect(findComparablesCerema(subject)).rejects.toBeInstanceOf(DvfUnavailableError);
+  });
+
+  it("lit les pages successives et convertit les ventes", async () => {
+    const pages = [
+      { features: [feature()], next: "page-2" },
+      { features: [feature({ idmutinvar: "autre" })], next: null },
+    ];
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(pages.shift()), { headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { comparables, truncated } = await findComparablesCerema({ ...subject, radiusM: 300 });
+    expect(comparables).toHaveLength(2);
+    expect(truncated).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -155,6 +204,53 @@ describe("fichiers geo-dvf (repli)", () => {
     expect(house.label).toBe("12 ALLEE DES ROSES, BAT A, Nantes");
   });
 
+  it("additionne les natures de culture d'une même parcelle (sol + jardin)", () => {
+    const land = [
+      header,
+      row({ ...base, id_mutation: "2024-9", valeur_fonciere: "390000", code_type_local: "1", type_local: "Maison", surface_reelle_bati: "100", nombre_pieces_principales: "4", code_nature_culture: "S", surface_terrain: "150" }),
+      row({ ...base, id_mutation: "2024-9", valeur_fonciere: "390000", code_type_local: "1", type_local: "Maison", surface_reelle_bati: "100", nombre_pieces_principales: "4", code_nature_culture: "J", surface_terrain: "600" }),
+    ].join("\n");
+    const [house] = reduceGeoDvfRows(parseCsv(land));
+    expect(house.landSurface).toBe(750);
+  });
+
+  it("répartit des points de recherche dans tout le cercle", () => {
+    const points = samplePoints(47.2172, -1.5652, 3000);
+    expect(points.length).toBeGreaterThan(60);
+    expect(points.length).toBeLessThan(150);
+    for (const [lat, lon] of points) expect(distanceMeters(47.2172, -1.5652, lat, lon)).toBeLessThanOrEqual(3001);
+    // Aucun « trou » de plus de 600 m entre un point quelconque du cercle et le point le plus proche.
+    const probe = [47.2172 + 0.009, -1.5652 + 0.004] as const;
+    expect(Math.min(...points.map(([lat, lon]) => distanceMeters(probe[0], probe[1], lat, lon)))).toBeLessThan(600);
+  });
+
+  it("continue sans une commune voisine indisponible, en le signalant", async () => {
+    const sale = { ...base, latitude: "47.2175", longitude: "-1.5655", id_mutation: "2025-1", date_mutation: "2025-03-15" };
+    const csvNantes = [header, row({ ...sale, code_type_local: "2", type_local: "Appartement", surface_reelle_bati: "70", nombre_pieces_principales: "3" })].join("\n");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("/44143.csv")) throw new TypeError("fetch failed");
+        if (url.includes("/2025/") && url.includes("/44109.csv")) return new Response(csvNantes);
+        return new Response("", { status: 404 });
+      }),
+    );
+    const { comparables, notes } = await findComparablesGeoDvf({ ...subject, citycode: "44109" });
+    expect(comparables).toHaveLength(1);
+    expect(notes.join(" ")).toMatch(/44143/);
+  });
+
+  it("échoue si les ventes de la commune du bien sont indisponibles", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+    );
+    // Commune du bien sans fichier en mémoire (les fichiers déjà lus sont gardés 12 h).
+    await expect(findComparablesGeoDvf({ ...subject, citycode: "44020" })).rejects.toBeInstanceOf(DvfUnavailableError);
+  });
+
   it("calcule le dossier du département", () => {
     expect(departmentOf("44109")).toBe("44");
     expect(departmentOf("2A004")).toBe("2A");
@@ -192,5 +288,57 @@ describe("règles communes", () => {
     expect(comparables.map((c) => c.id)).toEqual(["d", "b", "c", "f", "a", "e"]);
     expect(comparables.find((c) => c.id === "f")).toMatchObject({ outlier: true, excluded: true });
     expect(notes[0]).toMatch(/atypique/);
+  });
+});
+
+describe("lecture des réponses", () => {
+  const stream = (chunks: string[], fail = false) =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const c of chunks) controller.enqueue(new TextEncoder().encode(c));
+        if (fail) controller.error(new TypeError("terminated"));
+        else controller.close();
+      },
+    });
+
+  it("lit un texte et un JSON", async () => {
+    expect(await readText(new Response(stream(["abc", "déf"])), 1000)).toBe("abcdéf");
+    expect(await readJson(new Response('{"a":1}'), 1000)).toEqual({ a: 1 });
+  });
+
+  it("transforme une coupure, un JSON tronqué ou une réponse trop lourde en service indisponible", async () => {
+    await expect(readText(new Response(stream(["abc"], true)), 1000)).rejects.toBeInstanceOf(DvfUnavailableError);
+    await expect(readJson(new Response('{"features": ['), 1000)).rejects.toBeInstanceOf(DvfUnavailableError);
+    await expect(readText(new Response(stream(["x".repeat(600), "y".repeat(600)])), 1000)).rejects.toThrow(/volumineuse/);
+    await expect(readText(new Response("abc", { headers: { "content-length": "5000" } }), 1000)).rejects.toThrow(/volumineuse/);
+  });
+
+  it("respecte le délai global de la recherche", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok")));
+    await expect(fetchWithRetry("https://exemple.fr", { timeoutMs: 1000, deadline: AbortSignal.abort() })).rejects.toThrow(/trop de temps/);
+  });
+
+  it("retente une fois après une coupure réseau si demandé", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(new Response("ok"));
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await fetchWithRetry("https://exemple.fr", { timeoutMs: 1000, retries: 1, retryNetworkErrors: true });
+    expect(await res.text()).toBe("ok");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("limite du nombre de ventes", () => {
+  it(`ne garde que les ${MAX_COMPARABLES} ventes les plus proches, en le signalant`, () => {
+    const many: Comparable[] = Array.from({ length: MAX_COMPARABLES + 100 }, (_, i) => ({
+      id: `v${i}`, date: "2025-01-01", type: "appartement", price: 280000, surface: 70, rooms: 3, landSurface: null, label: null,
+      latitude: 0, longitude: 0, distance: MAX_COMPARABLES + 100 - i, pricePerSqm: 4000, excluded: false, outlier: false,
+    }));
+    const { comparables, notes } = finalizeComparables(many);
+    expect(comparables).toHaveLength(MAX_COMPARABLES);
+    expect(comparables[0].distance).toBe(1);
+    expect(notes[0]).toMatch(/plus proches/);
   });
 });

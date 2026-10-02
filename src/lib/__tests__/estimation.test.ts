@@ -5,8 +5,10 @@ import {
   boundingBox,
   computeEstimation,
   computeFees,
+  defaultListingPrice,
   distanceMeters,
   flagOutliers,
+  isInDvfArea,
   quantile,
   roundTo,
   splitBoundingBox,
@@ -122,5 +124,53 @@ describe("honoraires et net vendeur", () => {
   it("arrondit au millier", () => {
     expect(roundTo(284499)).toBe(284000);
     expect(roundTo(284500)).toBe(285000);
+  });
+});
+
+describe("prix de mise en vente selon la charge des honoraires", () => {
+  // Les prix DVF sont ceux des actes : honoraires inclus s'ils sont payés par le vendeur, exclus s'ils sont payés par l'acquéreur.
+  it("honoraires vendeur : la valeur DVF est le prix de mise en vente", () => {
+    expect(defaultListingPrice(280400, { mode: "pourcentage", value: 5, chargedTo: "vendeur" })).toBe(280000);
+  });
+  it("honoraires acquéreur : la valeur DVF est le net vendeur, les honoraires s'y ajoutent", () => {
+    expect(defaultListingPrice(280000, { mode: "pourcentage", value: 5, chargedTo: "acquereur" })).toBe(294000);
+    expect(defaultListingPrice(280000, { mode: "montant", value: 12000, chargedTo: "acquereur" })).toBe(292000);
+  });
+  it("retrouve le net vendeur égal à la valeur DVF (honoraires acquéreur)", () => {
+    const comparables = [3600, 3900, 4000, 4200, 4400].map((p) => ({ pricePerSqm: p, excluded: false }));
+    const r = computeEstimation({
+      comparables,
+      surface: 70,
+      adjustments: NO_ADJUSTMENTS,
+      fees: { mode: "pourcentage", value: 5, chargedTo: "acquereur" },
+    })!;
+    expect(r.mid).toBe(280000);
+    expect(r.recommendedPrice).toBe(294000);
+    expect(r.feesAmount).toBe(14000);
+    expect(r.netSellerPrice).toBe(280000);
+  });
+});
+
+describe("garde-fous", () => {
+  it("refuse des ajustements totalisant -100 % ou moins", () => {
+    const comparables = [{ pricePerSqm: 4000, excluded: false }];
+    const fees = { mode: "pourcentage" as const, value: 5, chargedTo: "vendeur" as const };
+    expect(computeEstimation({ comparables, surface: 70, adjustments: { ...NO_ADJUSTMENTS, etat: -60, travaux: -40 }, fees })).toBeNull();
+    expect(computeEstimation({ comparables, surface: 70, adjustments: { ...NO_ADJUSTMENTS, etat: -60, travaux: -39 }, fees })).not.toBeNull();
+  });
+
+  it("reconnaît les zones couvertes par DVF", () => {
+    expect(isInDvfArea(47.2184, -1.5536)).toBe(true); // Nantes
+    expect(isInDvfArea(41.9192, 8.7386)).toBe(true); // Ajaccio
+    expect(isInDvfArea(16.2411, -61.5331)).toBe(true); // Pointe-à-Pitre
+    expect(isInDvfArea(4.9372, -52.326)).toBe(true); // Cayenne
+    expect(isInDvfArea(-20.8823, 55.4504)).toBe(true); // Saint-Denis (La Réunion)
+    expect(isInDvfArea(90, 0)).toBe(false);
+    expect(isInDvfArea(40.4168, -3.7038)).toBe(false); // Madrid
+  });
+
+  it("refuse de découper une zone démesurée (coordonnées aberrantes)", () => {
+    expect(() => splitBoundingBox(boundingBox(89.99999, 0, 100), 0.0199)).toThrow(RangeError);
+    expect(splitBoundingBox(boundingBox(51, 2, 3000), 0.0199).length).toBeLessThanOrEqual(64);
   });
 });
