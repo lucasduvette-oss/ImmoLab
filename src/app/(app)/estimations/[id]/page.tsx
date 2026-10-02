@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangleIcon, BuildingIcon, MapPinIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { AlertTriangleIcon, BuildingIcon, FileTextIcon, MapPinIcon, PencilIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +52,15 @@ export default async function EstimationPage({ params }: PageProps<"/estimations
         backHref={e.property_id ? `/biens/${e.property_id}` : "/estimations"}
         actions={
           <>
+            {/* Rapport PDF (avis de valeur) généré à la demande, ouvert dans un nouvel onglet. */}
+            <Button asChild>
+              <a href={`/estimations/${e.id}/pdf`} target="_blank" rel="noopener">
+                <FileTextIcon />
+                <span>
+                  <span className="hidden sm:inline">Rapport </span>PDF
+                </span>
+              </a>
+            </Button>
             <Button asChild variant="outline" size="icon" aria-label="Modifier">
               <Link href={`/estimations/${e.id}/modifier`}>
                 <PencilIcon />

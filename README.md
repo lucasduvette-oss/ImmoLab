@@ -45,6 +45,7 @@ biens suivis, rapprochement biens / acquéreurs, relances, et estimations basée
 | Relances suggérées | Acquéreur sans contact depuis 30 jours, mandat qui arrive à échéance, avis de visite à demander, retour de visite à transmettre au vendeur |
 | Ma journée | Écran d'accueil : rendez-vous et visites du jour, tâches en retard et du jour, relances suggérées, nouvelles correspondances |
 | Estimation DVF | Ventes réelles comparables (même type, rayon, période, surface ±X %), carte et tableau, exclusion de ventes, ajustements en %, fourchette basse / moyenne / haute, prix conseillé, honoraires et net vendeur, historique sur la fiche du bien |
+| Rapport PDF | Avis de valeur à remettre au vendeur : logo et coordonnées de l'agence, le bien et sa photo, l'estimation, la carte et le tableau des ventes, l'argumentaire, la méthode |
 
 *(La liste s'enrichit à chaque étape du développement.)*
 
@@ -298,6 +299,24 @@ ou quand vous la transformez en tâche avec le bouton **+ Tâche**.
    dans l'historique de la fiche du bien et dans **Plus → Estimations**.
 6. **Modifier** une estimation recharge les ventes enregistrées (copie figée) ; **Relancer la recherche** les met à jour.
    Le prix conseillé suit les nouveaux ajustements, sauf si vous l'aviez saisi vous-même.
+
+### Étape 7 — Rapport PDF (avis de valeur)
+
+1. **Réglages** (menu **Plus** sur téléphone) : renseignez **Mon profil** (nom, téléphone, agence, adresse), puis
+   **Logo de l'agence** → **Ajouter un logo** (PNG ou JPEG ; l'image est réduite automatiquement). Le logo s'affiche ;
+   **Changer le logo** remplace l'ancien (qui est supprimé du stockage), **Retirer** l'enlève.
+2. Ouvrez une estimation enregistrée (fiche d'un bien → bloc **Estimations**, ou **Plus → Estimations**) et touchez
+   **Rapport PDF** : le rapport s'ouvre dans un nouvel onglet. Sur téléphone, utilisez le bouton de partage du lecteur PDF
+   pour l'enregistrer ou l'envoyer par mail.
+3. Vérifiez le contenu :
+   - **page 1** : logo (ou nom de l'agence) et vos coordonnées, le bien avec sa photo principale, le prix de mise en vente
+     conseillé, la fourchette, les honoraires et le net vendeur ;
+   - **page 2** : la carte (fond OpenStreetMap, cercle de recherche, ventes retenues en bleu, exclues en gris) et le tableau
+     des ventes retenues (les 60 plus proches ; toutes comptent dans le calcul) ;
+   - **dernière page** : votre argumentaire, la méthode de calcul et les mentions « À savoir » ;
+   - en bas de chaque page : agence, date de l'avis et numéro de page.
+4. La date « établie le » est celle de la dernière modification de l'estimation. Les caractères que la police du PDF
+   ne connaît pas sont remplacés (« → » devient « -> », « ≥ » devient « >= ») ; les emoji sont retirés.
 
 ---
 

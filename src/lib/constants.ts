@@ -151,3 +151,6 @@ export const MANDATE_ALERT_DAYS = 30;
 
 /** Espace de stockage Supabase (privé) des photos des biens. */
 export const PHOTOS_BUCKET = "property-photos";
+
+/** Espace de stockage Supabase (privé) des logos d'agence. */
+export const LOGOS_BUCKET = "agent-logos";
