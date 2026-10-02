@@ -208,11 +208,15 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
         <Card>
           <CardHeader>
             <CardTitle>Tâches</CardTitle>
-            <TaskDialog contacts={links.contacts} properties={links.properties} defaultContactId={contact.id} />
+            <TaskDialog
+              contacts={links.contacts}
+              properties={links.properties}
+              defaultContact={{ id: contact.id, label: fullName(contact) }}
+            />
           </CardHeader>
           <CardContent>
             {tasks.length ? (
-              <TaskList tasks={tasks} contacts={links.contacts} properties={links.properties} />
+              <TaskList tasks={tasks} contacts={links.contacts} properties={links.properties} hideLink="contact" />
             ) : (
               <p className="text-sm text-muted-foreground">Aucune tâche liée à ce contact.</p>
             )}

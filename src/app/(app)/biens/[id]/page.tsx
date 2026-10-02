@@ -281,11 +281,15 @@ export default async function PropertyPage({ params }: PageProps<"/biens/[id]">)
           <Card>
             <CardHeader>
               <CardTitle>Tâches</CardTitle>
-              <TaskDialog contacts={links.contacts} properties={links.properties} defaultPropertyId={property.id} />
+              <TaskDialog
+                contacts={links.contacts}
+                properties={links.properties}
+                defaultProperty={{ id: property.id, label: propertyTitle(property) }}
+              />
             </CardHeader>
             <CardContent>
               {tasks.length ? (
-                <TaskList tasks={tasks} contacts={links.contacts} properties={links.properties} />
+                <TaskList tasks={tasks} contacts={links.contacts} properties={links.properties} hideLink="property" />
               ) : (
                 <p className="text-sm text-muted-foreground">Aucune tâche liée à ce bien.</p>
               )}

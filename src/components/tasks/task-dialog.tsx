@@ -15,25 +15,38 @@ import { saveTask } from "@/app/(app)/taches/actions";
 
 export type LinkOption = { id: string; label: string };
 
+/** Ajoute une option à une liste si elle n'y figure pas (les listes de choix sont plafonnées). */
+function withOption(options: LinkOption[], extra?: LinkOption | null) {
+  return extra && !options.some((o) => o.id === extra.id) ? [extra, ...options] : options;
+}
+
 /**
  * Fenêtre de création / modification d'une tâche.
- * Depuis une fiche contact ou bien, le lien est pré-rempli (defaultContactId / defaultPropertyId).
+ * Depuis une fiche contact ou bien, le lien est pré-rempli (defaultContact / defaultProperty).
  */
 export function TaskDialog({
   task,
   contacts,
   properties,
-  defaultContactId,
-  defaultPropertyId,
+  defaultContact,
+  defaultProperty,
+  currentContact,
+  currentProperty,
   trigger,
 }: {
   task?: Task;
   contacts: LinkOption[];
   properties: LinkOption[];
-  defaultContactId?: string;
-  defaultPropertyId?: string;
+  /** Lien pré-rempli depuis une fiche contact ou bien. */
+  defaultContact?: LinkOption;
+  defaultProperty?: LinkOption;
+  /** Lien actuel d'une tâche existante (toujours proposé, même hors des listes). */
+  currentContact?: LinkOption | null;
+  currentProperty?: LinkOption | null;
   trigger?: React.ReactNode;
 }) {
+  const contactOptions = withOption(withOption(contacts, defaultContact), currentContact);
+  const propertyOptions = withOption(withOption(properties, defaultProperty), currentProperty);
   const [open, setOpen] = useState(false);
   const [due, setDue] = useState("");
   const { state, onSubmit, pending, reset } = useFormAction(saveTask, { onSuccess: () => setOpen(false) });
@@ -72,9 +85,9 @@ export function TaskDialog({
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Contact" htmlFor="contact_id" error={e.contact_id}>
-              <NativeSelect id="contact_id" name="contact_id" defaultValue={task?.contact_id ?? defaultContactId ?? ""}>
+              <NativeSelect id="contact_id" name="contact_id" defaultValue={task ? (task.contact_id ?? "") : (defaultContact?.id ?? "")}>
                 <option value="">— Aucun —</option>
-                {contacts.map((c) => (
+                {contactOptions.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.label}
                   </option>
@@ -82,9 +95,9 @@ export function TaskDialog({
               </NativeSelect>
             </Field>
             <Field label="Bien" htmlFor="property_id" error={e.property_id}>
-              <NativeSelect id="property_id" name="property_id" defaultValue={task?.property_id ?? defaultPropertyId ?? ""}>
+              <NativeSelect id="property_id" name="property_id" defaultValue={task ? (task.property_id ?? "") : (defaultProperty?.id ?? "")}>
                 <option value="">— Aucun —</option>
-                {properties.map((p) => (
+                {propertyOptions.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
                   </option>

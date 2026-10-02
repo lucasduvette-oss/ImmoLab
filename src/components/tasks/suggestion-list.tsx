@@ -25,10 +25,10 @@ export function SuggestionList({ suggestions }: { suggestions: Suggestion[] }) {
               <Icon className="size-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <Link href={s.href} className="font-medium hover:underline">
+              <Link href={s.href} className="font-medium break-words hover:underline">
                 {s.title}
               </Link>
-              <p className="text-sm text-muted-foreground">{s.description}</p>
+              <p className="text-sm break-words text-muted-foreground">{s.description}</p>
             </div>
             <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
               <ActionButton
@@ -37,10 +37,11 @@ export function SuggestionList({ suggestions }: { suggestions: Suggestion[] }) {
                 action={createTaskFromSuggestion.bind(null, {
                   key: s.key,
                   title: s.title,
-                  description: s.description,
+                  notes: s.taskNotes,
                   contactId: s.contactId,
                   propertyId: s.propertyId,
                 })}
+                aria-label={`Créer une tâche : ${s.title}`}
                 success="Tâche créée pour aujourd'hui."
               >
                 <PlusIcon /> Tâche

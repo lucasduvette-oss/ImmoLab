@@ -29,7 +29,8 @@ comment on table public.tasks is 'Tâches et relances de l''agent.';
 create index tasks_user_due_idx on public.tasks (user_id, done_at, due_date);
 create index tasks_contact_idx on public.tasks (contact_id);
 create index tasks_property_idx on public.tasks (property_id);
-create index tasks_suggestion_idx on public.tasks (user_id, suggestion_key);
+-- Une relance suggérée ne peut être transformée qu'une seule fois en tâche.
+create unique index tasks_suggestion_key_unique on public.tasks (user_id, suggestion_key) where suggestion_key is not null;
 
 create trigger tasks_updated_at
 before update on public.tasks
@@ -47,7 +48,8 @@ grant select, insert, update, delete on public.tasks to authenticated;
 
 -- ---------------------------------------------------------------------
 -- Date du dernier contact des acquéreurs actifs (ni « acheté » ni « perdu »).
--- Dernier contact = échange ou visite passés le plus récent (à défaut : création du contact).
+-- Dernier contact = le plus récent parmi : échange passé, visite passée, tâche liée
+-- au contact cochée comme faite (à défaut : date de création du contact).
 -- security_invoker : la vue applique les règles RLS de l'utilisateur qui l'interroge.
 -- ---------------------------------------------------------------------
 create view public.buyer_last_contact
@@ -62,11 +64,13 @@ select
   greatest(
     c.created_at,
     (select max(i.occurred_at) from public.interactions i where i.contact_id = c.id and i.occurred_at <= now()),
-    (select max(v.visited_at) from public.visits v where v.buyer_contact_id = c.id and v.visited_at <= now())
+    (select max(v.visited_at) from public.visits v where v.buyer_contact_id = c.id and v.visited_at <= now()),
+    (select max(t.done_at) from public.tasks t where t.contact_id = c.id and t.done_at <= now())
   ) as last_contact_at
 from public.contacts c
 where 'acquereur' = any (c.roles)
   and coalesce(c.buyer_stage, 'nouveau') not in ('achete', 'perdu');
 
-revoke all on public.buyer_last_contact from anon;
+-- Vue en lecture seule.
+revoke all on public.buyer_last_contact from anon, authenticated;
 grant select on public.buyer_last_contact to authenticated;

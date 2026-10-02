@@ -16,12 +16,13 @@ export function TaskList({
   tasks,
   contacts,
   properties,
-  showLinks = true,
+  hideLink,
 }: {
   tasks: TaskWithLinks[];
   contacts: LinkOption[];
   properties: LinkOption[];
-  showLinks?: boolean;
+  /** Sur une fiche contact (ou bien), inutile de répéter le lien vers cette même fiche. */
+  hideLink?: "contact" | "property";
 }) {
   const today = todayISO();
   return (
@@ -30,41 +31,43 @@ export function TaskList({
         const overdue = !t.done_at && t.due_date < today;
         return (
           <li key={t.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-            <TaskCheckbox taskId={t.id} done={Boolean(t.done_at)} />
+            <TaskCheckbox taskId={t.id} title={t.title} done={Boolean(t.done_at)} />
             <div className="min-w-0 flex-1">
-              <p className={cn("font-medium", t.done_at && "text-muted-foreground line-through")}>{t.title}</p>
+              <p className={cn("font-medium break-words", t.done_at && "text-muted-foreground line-through")}>{t.title}</p>
               <p className={cn("text-xs text-muted-foreground", overdue && "font-semibold text-destructive")}>
                 {t.done_at ? `Faite le ${formatDate(t.done_at)}` : `Échéance : ${t.due_date === today ? "aujourd'hui" : formatDate(t.due_date)}`}
               </p>
-              {showLinks && (t.contact || t.property) && (
+              {((t.contact && hideLink !== "contact") || (t.property && hideLink !== "property")) && (
                 <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                  {t.contact && (
+                  {t.contact && hideLink !== "contact" && (
                     <Link href={`/contacts/${t.contact.id}`} className="inline-flex items-center gap-1 text-primary hover:underline">
                       <UserIcon className="size-3" /> {fullName(t.contact)}
                     </Link>
                   )}
-                  {t.property && (
+                  {t.property && hideLink !== "property" && (
                     <Link href={`/biens/${t.property.id}`} className="inline-flex items-center gap-1 text-primary hover:underline">
                       <BuildingIcon className="size-3" /> {propertyTitle(t.property)}
                     </Link>
                   )}
                 </p>
               )}
-              {t.notes && <p className="mt-1 text-sm whitespace-pre-line text-muted-foreground">{t.notes}</p>}
+              {t.notes && <p className="mt-1 text-sm break-words whitespace-pre-line text-muted-foreground">{t.notes}</p>}
             </div>
             <div className="flex shrink-0">
               <TaskDialog
                 task={t}
                 contacts={contacts}
                 properties={properties}
+                currentContact={t.contact ? { id: t.contact.id, label: fullName(t.contact) } : null}
+                currentProperty={t.property ? { id: t.property.id, label: propertyTitle(t.property) } : null}
                 trigger={
-                  <Button variant="ghost" size="icon-sm" aria-label="Modifier la tâche">
+                  <Button variant="ghost" size="icon-sm" aria-label={`Modifier « ${t.title} »`}>
                     <PencilIcon />
                   </Button>
                 }
               />
               <ConfirmButton action={deleteTask.bind(null, t.id)} title="Supprimer cette tâche ?">
-                <Button variant="ghost" size="icon-sm" aria-label="Supprimer la tâche">
+                <Button variant="ghost" size="icon-sm" aria-label={`Supprimer « ${t.title} »`}>
                   <Trash2Icon />
                 </Button>
               </ConfirmButton>

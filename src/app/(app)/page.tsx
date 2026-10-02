@@ -33,6 +33,8 @@ type AgendaItem = {
 
 type ContactLite = Pick<Contact, "id" | "first_name" | "last_name" | "phone">;
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** Écran d'accueil : rendez-vous et visites du jour, tâches, nouvelles correspondances, relances. */
 export default async function TodayPage() {
   const { supabase, userId } = await requireUser();
@@ -119,7 +121,7 @@ export default async function TodayPage() {
     <>
       <PageHeader
         title={firstName ? `Bonjour ${firstName}` : "Ma journée"}
-        description={<span className="first-letter:uppercase">{formatLongDate(todayISO())}</span>}
+        description={capitalize(formatLongDate(todayISO()))}
       />
 
       <div className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0">
@@ -150,21 +152,29 @@ export default async function TodayPage() {
             ) : (
               <ol className="divide-y">
                 {agenda.map((item) => (
-                  <li key={item.id} className={cn("flex items-start gap-3 py-3 first:pt-0 last:pb-0", item.at < now && "opacity-60")}>
-                    <span className="w-12 shrink-0 pt-0.5 text-sm font-semibold tabular-nums">{formatTime(item.at)}</span>
+                  <li key={item.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                    <span className={cn("w-12 shrink-0 pt-0.5 text-sm font-semibold tabular-nums", item.at < now && "text-muted-foreground")}>
+                      {formatTime(item.at)}
+                    </span>
                     <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
                       {item.kind === "rdv" ? <CalendarIcon className="size-3.5" /> : <DoorOpenIcon className="size-3.5" />}
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{item.title}</p>
-                      {item.detail && (
-                        <p className="flex items-start gap-1 text-sm text-muted-foreground">
-                          {item.kind === "visite" && <MapPinIcon className="mt-0.5 size-3.5 shrink-0" />}
-                          {item.detail}
+                    {/* Sur téléphone, les boutons Appeler / SMS passent sous le texte pour lui laisser la place. */}
+                    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium break-words">
+                          {item.title}
+                          {item.at < now && <span className="ml-2 text-xs font-normal text-muted-foreground">(passé)</span>}
                         </p>
-                      )}
+                        {item.detail && (
+                          <p className="flex items-start gap-1 text-sm break-words text-muted-foreground">
+                            {item.kind === "visite" && <MapPinIcon className="mt-0.5 size-3.5 shrink-0" />}
+                            {item.detail}
+                          </p>
+                        )}
+                      </div>
+                      <ContactActions phone={item.phone} compact />
                     </div>
-                    <ContactActions phone={item.phone} compact />
                   </li>
                 ))}
               </ol>
@@ -200,22 +210,6 @@ export default async function TodayPage() {
           </CardContent>
         </Card>
 
-        {matches.length > 0 && (
-          <Card id="correspondances" className="scroll-mt-4">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BellIcon className="size-4" /> Nouvelles correspondances ({matches.length})
-              </CardTitle>
-              <Button asChild size="sm" variant="ghost">
-                <Link href="/correspondances">Tout voir</Link>
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <MatchList matches={matches.slice(0, 5)} show="both" />
-            </CardContent>
-          </Card>
-        )}
-
         <Card className={cn(matches.length === 0 && "lg:col-span-2")}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -230,6 +224,22 @@ export default async function TodayPage() {
             )}
           </CardContent>
         </Card>
+        {matches.length > 0 && (
+          <Card id="correspondances" className="scroll-mt-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BellIcon className="size-4" /> Nouvelles correspondances ({matches.length})
+              </CardTitle>
+              <Button asChild size="sm" variant="ghost">
+                <Link href="/correspondances">Tout voir</Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <MatchList matches={matches.slice(0, 3)} show="both" />
+            </CardContent>
+          </Card>
+        )}
+
       </div>
     </>
   );

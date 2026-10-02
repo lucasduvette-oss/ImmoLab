@@ -41,6 +41,9 @@ biens suivis, rapprochement biens / acquéreurs, relances, et estimations basée
 | Mandat | Type, dates, honoraires, alerte 30 jours avant l'échéance |
 | Visites | Date, acquéreur, retour de visite (note sur 5 + avis), suivi de la transmission au vendeur |
 | Rapprochement | Score de correspondance bien / acquéreur (sur 100) recalculé automatiquement, listes « acquéreurs compatibles » et « biens compatibles », notification des nouvelles correspondances |
+| Tâches | Tâches avec échéance, liées à un contact et/ou un bien ; en retard / aujourd'hui / à venir / terminées |
+| Relances suggérées | Acquéreur sans contact depuis 30 jours, mandat qui arrive à échéance, avis de visite à demander, retour de visite à transmettre au vendeur |
+| Ma journée | Écran d'accueil : rendez-vous et visites du jour, tâches en retard et du jour, relances suggérées, nouvelles correspondances |
 
 *(La liste s'enrichit à chaque étape du développement.)*
 
@@ -241,6 +244,29 @@ Le calcul est fait automatiquement par la base de données à chaque modificatio
 5. Passez un acquéreur à l'étape **Perdu** (sur sa fiche) : ses correspondances disparaissent.
 6. Sur **Correspondances**, **Tout marquer comme vu** : la pastille de notification disparaît.
 
+### Étape 5 — Tâches et « Ma journée »
+
+**Les relances suggérées** sont calculées à chaque affichage (elles ne sont pas enregistrées) :
+- **Relancer un acquéreur** : aucun échange ni visite depuis 30 jours (acquéreurs ni « acheté » ni « perdu ») ;
+- **Renouvellement du mandat** : échéance dans 30 jours ou moins (biens en estimation, en vente ou sous offre) ;
+- **Demander son avis à l'acquéreur** : visite passée sans retour saisi ;
+- **Transmettre le retour au vendeur** : retour saisi mais pas encore marqué « transmis ».
+
+Une relance disparaît d'elle-même quand la situation est réglée (échange saisi, mandat prolongé, retour saisi ou transmis),
+ou quand vous la transformez en tâche avec le bouton **+ Tâche**.
+
+1. Ouvrez **Ma journée** (écran d'accueil) avec les données de démonstration :
+   - **Agenda du jour** : rendez-vous d'estimation à 10 h, visite à 14 h, rendez-vous à 17 h 30 (avec boutons Appeler / SMS) ;
+   - **Relances suggérées** : 5 relances (Thomas Petit sans contact depuis 40 jours, deux mandats à échéance,
+     avis de visite à demander à Nadia Benali, retour à transmettre à Jean-Luc Bernard).
+2. Touchez **+ Tâche** sur « Relancer Thomas Petit » : la relance disparaît et une tâche apparaît dans **Tâches → Aujourd'hui**.
+3. Cochez la tâche (rond à gauche) : elle passe dans « Terminées ».
+4. **Tâches** → **Nouvelle tâche** : saisissez un intitulé, une date passée et choisissez un bien. Elle apparaît dans **En retard** (en rouge).
+5. Ouvrez la fiche de **Thomas Petit** : le bloc **Tâches** montre la tâche liée. Le bouton **Nouvelle tâche** de la fiche
+   pré-remplit le contact (idem depuis la fiche d'un bien).
+6. Sur la fiche de la **maison de Rezé**, cliquez sur **Marquer le retour comme transmis** : la relance
+   « Transmettre le retour de visite à Jean-Luc Bernard » disparaît de **Ma journée**.
+
 ---
 
 ## 7. Travailler sur le code en local (facultatif)
@@ -320,6 +346,7 @@ src/
     geocoding.ts       adresse → coordonnées GPS (Géoplateforme IGN)
     property.ts        titre d'un bien, alerte d'échéance du mandat
     matching.ts        libellés des critères de correspondance (le calcul est en SQL)
+    suggestions.ts     relances suggérées (acquéreurs, mandats, retours de visite)
   proxy.ts             protège les pages privées (redirige vers /connexion)
 supabase/
   migrations/          création des tables et des règles de sécurité (SQL)

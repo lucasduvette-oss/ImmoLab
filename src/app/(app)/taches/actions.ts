@@ -57,24 +57,30 @@ export async function deleteTask(taskId: string) {
   return { ok: true };
 }
 
-/** Transforme une relance suggérée en tâche pour aujourd'hui. */
-export async function createTaskFromSuggestion(suggestion: {
-  key: string;
-  title: string;
-  description: string;
-  contactId: string | null;
-  propertyId: string | null;
-}) {
+const suggestionSchema = z.object({
+  key: z.string().min(1).max(200),
+  title: z.string().min(1).max(300),
+  notes: z.string().max(1000),
+  contactId: z.uuid().nullable(),
+  propertyId: z.uuid().nullable(),
+});
+
+/** Transforme une relance suggérée en tâche pour aujourd'hui (une seule fois par relance). */
+export async function createTaskFromSuggestion(suggestion: z.infer<typeof suggestionSchema>) {
+  const parsed = suggestionSchema.safeParse(suggestion);
+  if (!parsed.success) return { error: "Relance invalide." };
+  const s = parsed.data;
   const { supabase } = await requireUser();
   const { error } = await supabase.from("tasks").insert({
-    title: suggestion.title,
-    notes: suggestion.description,
+    title: s.title,
+    notes: s.notes,
     due_date: todayISO(),
-    contact_id: suggestion.contactId,
-    property_id: suggestion.propertyId,
-    suggestion_key: suggestion.key,
+    contact_id: s.contactId,
+    property_id: s.propertyId,
+    suggestion_key: s.key,
   });
-  if (error) return { error: dbErrorMessage(error) };
+  // 23505 : la relance a déjà été transformée en tâche (autre onglet, autre appareil) — rien à faire.
+  if (error && error.code !== "23505") return { error: dbErrorMessage(error) };
   revalidatePath("/", "layout");
   return { ok: true };
 }

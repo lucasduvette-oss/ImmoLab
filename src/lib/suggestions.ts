@@ -18,7 +18,8 @@ export type Suggestion = {
   key: string; // identifiant stable (évite de proposer deux fois la même relance)
   kind: "relance-acquereur" | "mandat" | "avis-visite" | "retour-vendeur";
   title: string;
-  description: string;
+  description: string; // texte affiché (peut contenir une durée relative)
+  taskNotes: string; // notes de la tâche créée à partir de la relance (dates absolues, ne se périment pas)
   contactId: string | null;
   propertyId: string | null;
   href: string; // page où traiter la relance
@@ -45,7 +46,7 @@ export async function getSuggestions(supabase: SupabaseClient, now = new Date())
   const followUpLimit = new Date(now.getTime() - BUYER_FOLLOW_UP_DAYS * 86_400_000).toISOString();
   const visitLimit = new Date(now.getTime() - VISIT_WINDOW_DAYS * 86_400_000).toISOString();
 
-  const [buyers, mandates, visits, used] = await Promise.all([
+  const [buyers, mandates, visits] = await Promise.all([
     supabase.from("buyer_last_contact").select("contact_id, first_name, last_name, last_contact_at").lt("last_contact_at", followUpLimit).returns<BuyerRow[]>(),
     supabase
       .from("properties")
@@ -63,19 +64,20 @@ export async function getSuggestions(supabase: SupabaseClient, now = new Date())
       .lte("visited_at", now.toISOString())
       .gte("visited_at", visitLimit)
       .returns<VisitRow[]>(),
-    supabase.from("tasks").select("suggestion_key").not("suggestion_key", "is", null),
   ]);
 
-  const usedKeys = new Set((used.data ?? []).map((t) => t.suggestion_key as string));
   const list: Suggestion[] = [];
 
   for (const b of buyers.data ?? []) {
-    const days = daysBetween(b.last_contact_at.slice(0, 10), today);
+    // Date du dernier contact à l'heure de Paris (la base renvoie l'heure UTC).
+    const lastContact = todayISO(new Date(b.last_contact_at));
+    const days = daysBetween(lastContact, today);
     list.push({
-      key: `relance-acquereur:${b.contact_id}:${b.last_contact_at.slice(0, 10)}`,
+      key: `relance-acquereur:${b.contact_id}:${lastContact}`,
       kind: "relance-acquereur",
       title: `Relancer ${fullName(b)}`,
       description: `Acquéreur sans contact depuis ${days} jours.`,
+      taskNotes: `Dernier contact le ${formatDate(lastContact)}.`,
       contactId: b.contact_id,
       propertyId: null,
       href: `/contacts/${b.contact_id}`,
@@ -90,6 +92,7 @@ export async function getSuggestions(supabase: SupabaseClient, now = new Date())
       kind: "mandat",
       title: p.seller ? `Renouvellement du mandat avec ${fullName(p.seller)}` : "Renouvellement du mandat",
       description: `Le mandat « ${propertyTitle(p)} » ${when}.`,
+      taskNotes: `Le mandat « ${propertyTitle(p)} » ${when}.`,
       contactId: p.seller?.id ?? null,
       propertyId: p.id,
       href: `/biens/${p.id}`,
@@ -105,6 +108,7 @@ export async function getSuggestions(supabase: SupabaseClient, now = new Date())
         kind: "avis-visite",
         title: v.buyer ? `Demander son avis à ${fullName(v.buyer)}` : "Recueillir le retour de visite",
         description: `${label}.`,
+        taskNotes: `${label}.`,
         contactId: v.buyer?.id ?? null,
         propertyId: v.property.id,
         href: `/biens/${v.property.id}`,
@@ -115,6 +119,7 @@ export async function getSuggestions(supabase: SupabaseClient, now = new Date())
         kind: "retour-vendeur",
         title: v.property.seller ? `Transmettre le retour de visite à ${fullName(v.property.seller)}` : "Transmettre le retour de visite au vendeur",
         description: `${label}${v.buyer ? ` (${fullName(v.buyer)})` : ""}.`,
+        taskNotes: `${label}${v.buyer ? ` (${fullName(v.buyer)})` : ""}.`,
         contactId: v.property.seller?.id ?? null,
         propertyId: v.property.id,
         href: `/biens/${v.property.id}`,
@@ -122,5 +127,13 @@ export async function getSuggestions(supabase: SupabaseClient, now = new Date())
     }
   }
 
+  // Relances déjà transformées en tâche : on ne cherche que les clés des relances candidates
+  // (requête bornée, quel que soit le nombre de tâches accumulées).
+  const usedKeys = new Set<string>();
+  const keys = list.map((s) => s.key);
+  for (let i = 0; i < keys.length; i += 100) {
+    const { data } = await supabase.from("tasks").select("suggestion_key").in("suggestion_key", keys.slice(i, i + 100));
+    for (const t of data ?? []) usedKeys.add(t.suggestion_key as string);
+  }
   return list.filter((s) => !usedKeys.has(s.key));
 }

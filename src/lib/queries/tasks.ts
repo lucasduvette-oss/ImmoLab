@@ -36,13 +36,19 @@ export async function listRecentDoneTasks(supabase: SupabaseClient) {
   return data ?? [];
 }
 
-/** Tâches liées à un contact ou à un bien (à faire d'abord, puis terminées). */
+/** Tâches liées à un contact ou à un bien : toutes celles à faire, puis les 20 dernières terminées. */
 export async function tasksFor(supabase: SupabaseClient, link: { contactId?: string; propertyId?: string }) {
-  let query = supabase.from("tasks").select(SELECT).order("done_at", { ascending: true, nullsFirst: true }).order("due_date").limit(50);
-  if (link.contactId) query = query.eq("contact_id", link.contactId);
-  if (link.propertyId) query = query.eq("property_id", link.propertyId);
-  const { data } = await query.returns<TaskWithLinks[]>();
-  return data ?? [];
+  const base = () => {
+    let query = supabase.from("tasks").select(SELECT);
+    if (link.contactId) query = query.eq("contact_id", link.contactId);
+    if (link.propertyId) query = query.eq("property_id", link.propertyId);
+    return query;
+  };
+  const [open, done] = await Promise.all([
+    base().is("done_at", null).order("due_date").limit(200).returns<TaskWithLinks[]>(),
+    base().not("done_at", "is", null).order("done_at", { ascending: false }).limit(20).returns<TaskWithLinks[]>(),
+  ]);
+  return [...(open.data ?? []), ...(done.data ?? [])];
 }
 
 /** Répartit les tâches à faire : en retard / aujourd'hui / à venir. */

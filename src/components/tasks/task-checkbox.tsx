@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { setTaskDone } from "@/app/(app)/taches/actions";
 
 /** Case ronde pour cocher une tâche (mise à jour immédiate à l'écran). */
-export function TaskCheckbox({ taskId, done }: { taskId: string; done: boolean }) {
+export function TaskCheckbox({ taskId, title, done }: { taskId: string; title: string; done: boolean }) {
   const [optimisticDone, setOptimisticDone] = useOptimistic(done);
   const [, startTransition] = useTransition();
 
@@ -17,7 +17,7 @@ export function TaskCheckbox({ taskId, done }: { taskId: string; done: boolean }
       type="button"
       role="checkbox"
       aria-checked={optimisticDone}
-      aria-label={optimisticDone ? "Marquer comme à faire" : "Marquer comme faite"}
+      aria-label={`Tâche faite : ${title}`}
       onClick={() =>
         startTransition(async () => {
           setOptimisticDone(!optimisticDone);
@@ -26,12 +26,17 @@ export function TaskCheckbox({ taskId, done }: { taskId: string; done: boolean }
           else if (!optimisticDone) toast.success("Tâche terminée.");
         })
       }
-      className={cn(
-        "flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-        optimisticDone ? "border-success bg-success text-white" : "border-muted-foreground/40 hover:border-primary",
-      )}
+      // Zone tactile de 40 px autour d'un rond de 24 px.
+      className="-m-2 flex size-10 shrink-0 items-center justify-center rounded-full focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
     >
-      {optimisticDone && <CheckIcon className="size-4" />}
+      <span
+        className={cn(
+          "flex size-6 items-center justify-center rounded-full border-2 transition-colors",
+          optimisticDone ? "border-success bg-success text-white" : "border-muted-foreground hover:border-primary",
+        )}
+      >
+        {optimisticDone && <CheckIcon className="size-4" />}
+      </span>
     </button>
   );
 }
