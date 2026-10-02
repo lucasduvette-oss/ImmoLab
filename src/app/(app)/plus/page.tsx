@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BellIcon, CalculatorIcon, ChevronRightIcon, KanbanIcon, LogOutIcon, SettingsIcon } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
+import { InstallAppCard } from "@/components/pwa/install-app-card";
 import { requireUser } from "@/lib/supabase/server";
 import { countNewMatches } from "@/lib/queries/matches";
 import { signOut } from "@/app/(auth)/actions";
@@ -38,6 +39,7 @@ export default async function MorePage() {
           </li>
         ))}
       </ul>
+      <InstallAppCard className="mt-6" />
       <form action={signOut} className="mt-6">
         <button
           type="submit"

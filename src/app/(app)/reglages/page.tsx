@@ -4,6 +4,7 @@ import { LogOutIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
+import { InstallAppCard } from "@/components/pwa/install-app-card";
 import { LOGOS_BUCKET } from "@/lib/constants";
 import { requireUser } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
@@ -53,6 +54,8 @@ export default async function SettingsPage() {
             <UpdatePasswordForm backHref="/reglages" />
           </CardContent>
         </Card>
+
+        <InstallAppCard />
 
         <form action={signOut}>
           <Button type="submit" variant="outline" className="w-full text-destructive sm:w-fit">

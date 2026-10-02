@@ -16,6 +16,7 @@ biens suivis, rapprochement biens / acquéreurs, relances, et estimations basée
 1. [Fonctionnalités](#1-fonctionnalités)
 2. [Ce dont vous avez besoin](#2-ce-dont-vous-avez-besoin)
 3. [Mise en ligne pas à pas (sans rien installer)](#3-mise-en-ligne-pas-à-pas-sans-rien-installer)
+   — dont [installer l'application sur le téléphone](#36-installer-lapplication-sur-le-téléphone)
 4. [Variables d'environnement](#4-variables-denvironnement)
 5. [Données de démonstration](#5-données-de-démonstration)
 6. [Comment tester chaque fonctionnalité](#6-comment-tester-chaque-fonctionnalité)
@@ -46,8 +47,7 @@ biens suivis, rapprochement biens / acquéreurs, relances, et estimations basée
 | Ma journée | Écran d'accueil : rendez-vous et visites du jour, tâches en retard et du jour, relances suggérées, nouvelles correspondances |
 | Estimation DVF | Ventes réelles comparables (même type, rayon, période, surface ±X %), carte et tableau, exclusion de ventes, ajustements en %, fourchette basse / moyenne / haute, prix conseillé, honoraires et net vendeur, historique sur la fiche du bien |
 | Rapport PDF | Avis de valeur à remettre au vendeur : logo et coordonnées de l'agence, le bien et sa photo, l'estimation, la carte et le tableau des ventes, l'argumentaire, la méthode |
-
-*(La liste s'enrichit à chaque étape du développement.)*
+| Application installable | Icône sur l'écran d'accueil du téléphone (iPhone et Android) ou de l'ordinateur, ouverture en plein écran, page « hors connexion » sans réseau |
 
 ---
 
@@ -88,6 +88,20 @@ Ils se trouvent dans le dossier [`supabase/migrations`](supabase/migrations) du 
    2. dans Supabase, cliquez sur **+ New query**, collez le contenu ;
    3. cliquez sur **Run** (ou Ctrl + Entrée). Le message **Success. No rows returned** doit apparaître.
 3. Vérifiez dans **Table Editor** que les tables sont créées (par exemple `profiles`).
+
+Les 7 fichiers, dans l'ordre :
+
+| Fichier | Contenu |
+|---|---|
+| `20261001000100_profiles.sql` | profils des agents (création automatique à l'inscription) |
+| `20261001000200_contacts.sql` | contacts, rôles, acquéreurs (critères), échanges |
+| `20261001000300_properties.sql` | biens, photos (stockage privé), visites |
+| `20261001000400_matches.sql` | rapprochement biens / acquéreurs (calcul du score) |
+| `20261001000500_tasks.sql` | tâches et relances |
+| `20261001000600_estimations.sql` | estimations DVF |
+| `20261001000700_logos.sql` | stockage privé des logos d'agence |
+
+Chaque fichier active la sécurité « RLS » : un agent ne peut lire ou modifier que ses propres données.
 
 > Si un fichier a déjà été exécuté, ne le relancez pas : vous obtiendriez une erreur « already exists » (sans gravité).
 
@@ -143,6 +157,27 @@ La *Secret key* (`sb_secret_…`), elle, ne doit **jamais** être partagée ni m
 > L'envoi d'emails intégré à Supabase est limité (quelques emails par heure, et seulement vers les adresses
 > des membres de votre projet Supabase). C'est suffisant pour vous. Pour davantage, configurez un service
 > d'envoi (SMTP) dans **Authentication** → **Emails** → **SMTP Settings**.
+
+### 3.6 Installer l'application sur le téléphone
+
+ImmoLab est une « application web installable » : pas besoin d'App Store ni de Play Store.
+Une fois installée, elle s'ouvre depuis une icône sur l'écran d'accueil, en plein écran, et affiche les mêmes données
+que sur l'ordinateur. La carte **Installer l'application** (menu **Plus**, ou **Réglages**) rappelle la marche à suivre.
+
+**iPhone / iPad (Safari)**
+1. Ouvrez l'adresse de l'application dans **Safari** et connectez-vous.
+2. Touchez le bouton **Partager** (carré avec une flèche vers le haut).
+3. Choisissez **Sur l'écran d'accueil**, puis **Ajouter**.
+
+**Android (Chrome)**
+1. Ouvrez l'adresse de l'application dans **Chrome** et connectez-vous.
+2. Touchez le bouton **Installer ImmoLab** de la carte « Installer l'application » (menu **Plus**), ou le menu **⋮** de
+   Chrome → **Installer l'application** (ou **Ajouter à l'écran d'accueil**).
+
+**Ordinateur (Chrome ou Edge)** : cliquez sur l'icône d'installation à droite de la barre d'adresse.
+
+> Une connexion Internet reste nécessaire : les données ne sont pas copiées sur le téléphone (elles sont toujours
+> à jour et protégées). Sans réseau, une page « Vous êtes hors connexion » s'affiche avec un bouton **Réessayer**.
 
 ---
 
@@ -260,7 +295,8 @@ ou quand vous la transformez en tâche avec le bouton **+ Tâche**.
 1. Ouvrez **Ma journée** (écran d'accueil) avec les données de démonstration :
    - **Agenda du jour** : rendez-vous d'estimation à 10 h, visite à 14 h, rendez-vous à 17 h 30 (avec boutons Appeler / SMS) ;
    - **Relances suggérées** : 5 relances (Thomas Petit sans contact depuis 40 jours, deux mandats à échéance,
-     avis de visite à demander à Nadia Benali, retour à transmettre à Jean-Luc Bernard).
+     avis de visite à demander à Nadia Benali, retour à transmettre à Jean-Luc Bernard) ; après 14 h, une 6ᵉ apparaît :
+     « Demander son avis à Julien Faure » (la visite du jour est passée).
 2. Touchez **+ Tâche** sur « Relancer Thomas Petit » : la relance disparaît et une tâche apparaît dans **Tâches → Aujourd'hui**.
 3. Cochez la tâche (rond à gauche) : elle passe dans « Terminées ».
 4. **Tâches** → **Nouvelle tâche** : saisissez un intitulé, une date passée et choisissez un bien. Elle apparaît dans **En retard** (en rouge).
@@ -317,6 +353,17 @@ ou quand vous la transformez en tâche avec le bouton **+ Tâche**.
    - en bas de chaque page : agence, date de l'avis et numéro de page.
 4. La date « établie le » est celle de la dernière modification de l'estimation. Les caractères que la police du PDF
    ne connaît pas sont remplacés (« → » devient « -> », « ≥ » devient « >= ») ; les emoji sont retirés.
+
+### Étape 8 — Application installable (PWA)
+
+1. Sur un téléphone Android avec Chrome, ouvrez l'application, puis **Plus** : la carte **Installer l'application** propose
+   un bouton **Installer ImmoLab** (ou, s'il n'apparaît pas encore, la marche à suivre par le menu ⋮). Installez-la.
+2. Sur iPhone avec Safari, ouvrez **Plus** : la carte explique **Partager → Sur l'écran d'accueil**. Ajoutez-la.
+3. Ouvrez ImmoLab depuis l'icône de l'écran d'accueil : elle s'affiche en plein écran, sans barre d'adresse,
+   et la carte « Installer l'application » n'apparaît plus.
+4. Passez le téléphone en **mode avion** et ouvrez une page (ex. **Contacts**) : la page « Vous êtes hors connexion »
+   s'affiche. Réactivez le réseau et touchez **Réessayer** : la page demandée s'ouvre.
+5. Appui long sur l'icône (Android) : les raccourcis **Ma journée**, **Nouveau contact** et **Tâches** sont proposés.
 
 ---
 
@@ -391,6 +438,10 @@ N'utilisez qu'**une seule** des deux méthodes (copier-coller *ou* ligne de comm
 | « Le lien utilisé est invalide ou a expiré » | Le lien a déjà servi ou date de plus d'une heure : recommencez. Vérifiez la *Site URL* et les *Redirect URLs* (section 3.5). |
 | Je ne reçois pas l'email | Regardez dans les indésirables. L'envoi intégré de Supabase est limité à quelques emails par heure. |
 | « Les inscriptions sont fermées » | Normal si vous avez désactivé les inscriptions (section 3.5). |
+| Le bouton « Installer ImmoLab » n'apparaît pas (Android) | Chrome le propose après quelques secondes d'utilisation ; sinon passez par le menu ⋮ → **Installer l'application**. L'adresse doit être en `https://` (c'est le cas sur Vercel). |
+| L'application installée affiche une ancienne version | Fermez-la complètement puis rouvrez-la : la nouvelle version est chargée automatiquement. |
+| Le rapport PDF n'a pas de carte | Le service de cartes OpenStreetMap n'a pas répondu à temps : régénérez le rapport un peu plus tard. |
+| « Le service DVF du Cerema ne répond pas » | Normal de temps en temps (service en préproduction) : les fichiers de data.gouv.fr prennent le relais automatiquement. |
 
 ---
 
@@ -402,9 +453,13 @@ src/
     (auth)/            pages de connexion, inscription, mot de passe
     (app)/             pages de l'espace connecté (Ma journée, contacts, biens…)
     auth/confirm/      arrivée des liens reçus par email
+    hors-ligne/        page affichée sans réseau (application installée)
+    manifest.ts        manifeste de l'application installable (nom, icônes, couleurs)
   components/
     ui/                composants d'interface (boutons, champs, fenêtres) de type shadcn/ui
     address-autocomplete.tsx  saisie d'adresse avec suggestions (géocodage IGN)
+    estimation/        carte des ventes comparables (Leaflet / OpenStreetMap)
+    pwa/               enregistrement du service worker, carte « Installer l'application »
   lib/
     supabase/          connexion à Supabase (navigateur, serveur, proxy)
     queries/           lectures en base réutilisées par plusieurs pages
@@ -417,7 +472,12 @@ src/
     suggestions.ts     relances suggérées (acquéreurs, mandats, retours de visite)
     estimation.ts      calculs de l'estimation (distance, quartiles, ajustements, honoraires)
     dvf/               lecture des ventes DVF : cerema.ts (source principale), geodvf.ts (repli), index.ts (choix)
+    pdf/               rapport PDF (avis de valeur) : mise en page, caractères, contrôle des images
+    static-map.ts      carte du rapport PDF (tuiles OpenStreetMap assemblées sur le serveur)
   proxy.ts             protège les pages privées (redirige vers /connexion)
+public/
+  sw.js                service worker (démarrage rapide, page hors connexion ; aucune donnée mise en cache)
+  icons/               icônes de l'application
 supabase/
   migrations/          création des tables et des règles de sécurité (SQL)
   demo-data.sql        données de démonstration fictives (Nantes)
