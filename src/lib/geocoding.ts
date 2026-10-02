@@ -74,3 +74,23 @@ export async function geocodeAddress(address: string): Promise<GeocodedAddress |
   const best = results[0];
   return best && best.score >= 0.4 ? best : null;
 }
+
+/**
+ * Géocodage inverse : code INSEE de la commune la plus proche d'un point (ou null).
+ * Utilisé pour savoir quelles communes couvre le cercle de recherche des ventes.
+ */
+export async function reverseCitycode(latitude: number, longitude: number): Promise<string | null> {
+  const url = new URL(`${baseUrl()}/reverse`);
+  url.searchParams.set("lat", String(latitude));
+  url.searchParams.set("lon", String(longitude));
+  url.searchParams.set("index", "address");
+  url.searchParams.set("limit", "1");
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000), headers: { accept: "application/json" } });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { features?: { properties?: { citycode?: string } }[] };
+    return json.features?.[0]?.properties?.citycode ?? null;
+  } catch {
+    return null;
+  }
+}

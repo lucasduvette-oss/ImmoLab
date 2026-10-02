@@ -159,3 +159,11 @@ function parisOffsetMinutes(date: Date): number {
 export function fullName(c: { first_name?: string | null; last_name: string }): string {
   return [c.first_name, c.last_name].filter(Boolean).join(" ");
 }
+
+/** Lit un nombre saisi en français (« 72,5 », « 350 000 », « -5 ») ; texte vide ou invalide → null. */
+export function parseFrenchNumber(value: string): number | null {
+  const cleaned = value.replace(/[\s\u00a0\u202f€%]/g, "").replace(",", ".").replace("−", "-");
+  if (cleaned === "" || cleaned === "-") return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}

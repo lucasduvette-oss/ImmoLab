@@ -5,7 +5,7 @@ import { mandateAlert, mandateAlertText, propertyTitle } from "@/lib/property";
 
 describe("biens", () => {
   it("construit un titre lisible", () => {
-    expect(propertyTitle({ type: "appartement", rooms: 3, surface: 68, city: "Nantes" }).replace(/ /g, " ")).toBe(
+    expect(propertyTitle({ type: "appartement", rooms: 3, surface: 68, city: "Nantes" }).replace(/\u00a0/g, " ")).toBe(
       "Appartement 3 pièces · 68 m² · Nantes",
     );
   });

@@ -13,7 +13,7 @@ import {
 import { normalizeSearch } from "@/lib/search";
 
 // Espace insécable fine utilisée par Intl en français
-const nbsp = (s: string) => s.replace(/[  ]/g, " ");
+const nbsp = (s: string) => s.replace(/[\u202f\u00a0]/g, " ");
 
 describe("mise en forme française", () => {
   it("formate les euros sans décimales", () => {

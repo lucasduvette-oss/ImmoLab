@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { matchDetailLabel, scoreTone } from "@/lib/matching";
 
-const clean = (s: string) => s.replace(/[  ]/g, " ");
+const clean = (s: string) => s.replace(/[\u202f\u00a0]/g, " ");
 
 describe("rapprochement", () => {
   it("rédige les critères en français", () => {

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangleIcon, MapPinIcon, PencilIcon, SendIcon, Trash2Icon, UsersIcon } from "lucide-react";
+import { AlertTriangleIcon, CalculatorIcon, MapPinIcon, PencilIcon, PlusIcon, SendIcon, Trash2Icon, UsersIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { TaskList } from "@/components/tasks/task-list";
 import { ActionButton } from "@/components/action-button";
 import { ContactActions } from "@/components/contact-actions";
 import { MatchList } from "@/components/match-list";
+import { EstimationList } from "@/components/estimation/estimation-list";
 import { StatusBadge } from "@/components/property-badges";
 import { Stars } from "@/components/stars";
 import { MANDATE_TYPES, OUTDOOR_TYPES, PARKING_TYPES, PROPERTY_CONDITIONS } from "@/lib/constants";
@@ -19,6 +20,7 @@ import { formatDate, formatDateTime, formatEuros, formatNumber, formatSurface, f
 import { mandateAlert, mandateAlertText, propertyAddress, propertyTitle } from "@/lib/property";
 import { listContactOptions } from "@/lib/queries/contacts";
 import { matchesForProperty } from "@/lib/queries/matches";
+import { listEstimations } from "@/lib/queries/estimations";
 import { signPhotoUrls } from "@/lib/queries/properties";
 import { getLinkOptions } from "@/lib/queries/link-options";
 import { tasksFor } from "@/lib/queries/tasks";
@@ -52,7 +54,7 @@ export default async function PropertyPage({ params }: PageProps<"/biens/[id]">)
   const { id } = await params;
   const { supabase, userId } = await requireUser();
 
-  const [{ data: property }, { data: photos }, { data: visits }, buyers, matches, tasks, links] = await Promise.all([
+  const [{ data: property }, { data: photos }, { data: visits }, buyers, matches, tasks, links, estimations] = await Promise.all([
     supabase.from("properties").select("*").eq("id", id).maybeSingle<Property>(),
     supabase.from("property_photos").select("*").eq("property_id", id).order("position").order("created_at").returns<PropertyPhoto[]>(),
     supabase
@@ -65,6 +67,7 @@ export default async function PropertyPage({ params }: PageProps<"/biens/[id]">)
     matchesForProperty(supabase, id),
     tasksFor(supabase, { propertyId: id }),
     getLinkOptions(supabase),
+    listEstimations(supabase, id),
   ]);
   if (!property) notFound();
 
@@ -255,6 +258,26 @@ export default async function PropertyPage({ params }: PageProps<"/biens/[id]">)
         </div>
 
         <div className="grid content-start gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalculatorIcon className="size-4" /> Estimations ({estimations.length})
+              </CardTitle>
+              <Button asChild size="sm">
+                <Link href={`/estimations/nouvelle?bien=${property.id}`}>
+                  <PlusIcon /> Estimer
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {estimations.length ? (
+                <EstimationList estimations={estimations} showAddress={false} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucune estimation : lancez-en une à partir des ventes DVF du secteur.</p>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Vendeur</CardTitle>

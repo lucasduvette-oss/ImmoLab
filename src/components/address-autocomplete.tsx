@@ -16,13 +16,31 @@ type Initial = {
   longitude?: number | null;
 };
 
+/** Valeur transmise au parent à chaque changement (utilisée par l'estimation). */
+export type AddressValue = {
+  address: string;
+  postal_code: string;
+  city: string;
+  citycode: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
 /**
  * Champs « adresse / code postal / ville » avec suggestions d'adresses (géocodage IGN).
  * Choisir une suggestion renseigne aussi la position GPS (champs cachés latitude / longitude),
  * indispensable pour l'estimation DVF. Si aucune suggestion n'est choisie, le serveur
  * tentera de localiser l'adresse au moment de l'enregistrement.
  */
-export function AddressAutocomplete({ initial, errors = {} }: { initial?: Initial; errors?: Record<string, string> }) {
+export function AddressAutocomplete({
+  initial,
+  errors = {},
+  onChange,
+}: {
+  initial?: Initial;
+  errors?: Record<string, string>;
+  onChange?: (value: AddressValue) => void;
+}) {
   const [address, setAddress] = useState(initial?.address ?? "");
   const [postalCode, setPostalCode] = useState(initial?.postal_code ?? "");
   const [city, setCity] = useState(initial?.city ?? "");
@@ -71,14 +89,24 @@ export function AddressAutocomplete({ initial, errors = {} }: { initial?: Initia
     setCitycode(s.citycode);
     setCoords({ lat: s.latitude, lng: s.longitude });
     setOpen(false);
+    onChange?.({
+      address: s.street || s.label,
+      postal_code: s.postalCode,
+      city: s.city,
+      citycode: s.citycode,
+      latitude: s.latitude,
+      longitude: s.longitude,
+    });
   }
 
   // Toute modification manuelle annule la position GPS (elle sera recalculée).
-  function edit(setter: (v: string) => void) {
+  function edit(field: "address" | "postal_code" | "city", setter: (v: string) => void) {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
       setter(e.target.value);
       setCoords(null);
       setCitycode("");
+      const current = { address, postal_code: postalCode, city, citycode: "", latitude: null, longitude: null };
+      onChange?.({ ...current, [field]: e.target.value });
     };
   }
 
@@ -94,7 +122,7 @@ export function AddressAutocomplete({ initial, errors = {} }: { initial?: Initia
             id="address"
             name="address"
             value={address}
-            onChange={edit(setAddress)}
+            onChange={edit("address", setAddress)}
             onFocus={() => suggestions.length && setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             autoComplete="off"
@@ -122,10 +150,10 @@ export function AddressAutocomplete({ initial, errors = {} }: { initial?: Initia
       </div>
       <div className="grid grid-cols-[8rem_1fr] gap-4">
         <Field label="Code postal" htmlFor="postal_code" error={errors.postal_code}>
-          <Input id="postal_code" name="postal_code" inputMode="numeric" maxLength={5} value={postalCode} onChange={edit(setPostalCode)} />
+          <Input id="postal_code" name="postal_code" inputMode="numeric" maxLength={5} value={postalCode} onChange={edit("postal_code", setPostalCode)} />
         </Field>
         <Field label="Ville" htmlFor="city" error={errors.city}>
-          <Input id="city" name="city" value={city} onChange={edit(setCity)} />
+          <Input id="city" name="city" value={city} onChange={edit("city", setCity)} />
         </Field>
       </div>
       <p className="-mt-2 flex items-center gap-1 text-xs text-muted-foreground">

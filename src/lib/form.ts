@@ -36,7 +36,7 @@ export function str(formData: FormData, name: string): string | null {
 export function num(formData: FormData, name: string): number | null {
   const v = str(formData, name);
   if (v === null) return null;
-  const n = Number(v.replace(/\s/g, "").replace(/ /g, "").replace(",", "."));
+  const n = Number(v.replace(/\s/g, "").replace(/\u00a0/g, "").replace(",", "."));
   return Number.isFinite(n) ? n : NaN;
 }
 

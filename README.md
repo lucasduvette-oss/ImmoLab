@@ -44,6 +44,7 @@ biens suivis, rapprochement biens / acquéreurs, relances, et estimations basée
 | Tâches | Tâches avec échéance, liées à un contact et/ou un bien ; en retard / aujourd'hui / à venir / terminées |
 | Relances suggérées | Acquéreur sans contact depuis 30 jours, mandat qui arrive à échéance, avis de visite à demander, retour de visite à transmettre au vendeur |
 | Ma journée | Écran d'accueil : rendez-vous et visites du jour, tâches en retard et du jour, relances suggérées, nouvelles correspondances |
+| Estimation DVF | Ventes réelles comparables (même type, rayon, période, surface ±X %), carte et tableau, exclusion de ventes, ajustements en %, fourchette basse / moyenne / haute, prix conseillé, honoraires et net vendeur, historique sur la fiche du bien |
 
 *(La liste s'enrichit à chaque étape du développement.)*
 
@@ -267,6 +268,27 @@ ou quand vous la transformez en tâche avec le bouton **+ Tâche**.
 6. Sur la fiche de la **maison de Rezé**, cliquez sur **Marquer le retour comme transmis** : la relance
    « Transmettre le retour de visite à Jean-Luc Bernard » disparaît de **Ma journée**.
 
+### Étape 6 — Estimation DVF
+
+**Méthode de calcul :**
+1. ventes « classiques » (ni VEFA, ni adjudication, ni échange) d'**un seul** appartement ou d'**une seule** maison
+   (dépendances acceptées), dans le rayon (500 m par défaut), sur la période (3 ans par défaut), avec une surface à ±20 % ;
+2. les prix au m² **atypiques** (règle de l'écart interquartile) sont pré-exclus ; vous pouvez exclure ou réintégrer toute vente ;
+3. fourchette **basse / moyenne / haute** = 1er quartile / médiane / 3e quartile des prix au m² × surface × (1 + ajustements) ;
+4. **prix de mise en vente conseillé** = valeur moyenne arrondie au millier (modifiable) ;
+5. **net vendeur** = prix − honoraires. Honoraires en % ou en €, à la charge du vendeur (% du prix)
+   ou de l'acquéreur (% du net vendeur, le prix affiché inclut alors les honoraires).
+
+1. Ouvrez un bien (ex. **56 boulevard Guist'hau**), bloc **Estimations** → **Estimer** : le formulaire est pré-rempli
+   (type, adresse localisée, surface, pièces).
+2. **Rechercher les ventes comparables** : la carte (OpenStreetMap) et le tableau des ventes s'affichent.
+   Touchez un point de la carte ou décochez une ligne pour **exclure** une vente : le résultat se met à jour aussitôt.
+3. Saisissez des **ajustements** (ex. DPE `-3`, Extérieur `2,5`) et les **honoraires** : la fourchette, le prix conseillé
+   et le net vendeur sont recalculés.
+4. Rédigez l'**argumentaire** puis **Enregistrer l'estimation** : la page de l'estimation s'ouvre ; elle apparaît aussi
+   dans l'historique de la fiche du bien et dans **Plus → Estimations**.
+5. **Modifier** une estimation recharge les ventes enregistrées (copie figée) ; **Relancer la recherche** les met à jour.
+
 ---
 
 ## 7. Travailler sur le code en local (facultatif)
@@ -300,7 +322,24 @@ N'utilisez qu'**une seule** des deux méthodes (copier-coller *ou* ligne de comm
 
 ## 8. Sources de données et limites
 
-*(Complété à l'étape 6.)*
+| Donnée | Source | Remarques |
+|---|---|---|
+| Ventes comparables | **API « Données foncières » du Cerema**, jeu DVF+ open data (`apidf-preprod.cerema.fr`) | Gratuite, sans clé. Ventes du 1er janvier 2014 au 31 décembre 2025 (version 2026.1). Service en « préproduction » : il peut être lent ou indisponible. |
+| Ventes (repli automatique) | **Fichiers « DVF géolocalisées »** d'Etalab (`files.data.gouv.fr/geo-dvf`) | Utilisés automatiquement si l'API du Cerema ne répond pas (un message le signale). 5 dernières années. |
+| Adresse → position GPS | **Géoplateforme IGN** (`data.geopf.fr/geocodage`) | Remplace l'ancienne API Adresse, arrêtée fin janvier 2026. Limite : 50 requêtes par seconde. |
+| Fond de carte | **OpenStreetMap** | Attribution « © contributeurs OpenStreetMap » affichée. Usage modéré. |
+
+**Limites à connaître :**
+- DVF ne couvre **ni l'Alsace (67, 68), ni la Moselle (57), ni Mayotte** (livre foncier) : l'application le signale.
+- Les données sont publiées **avec plusieurs mois de décalage** (mises à jour en avril et en octobre) :
+  les ventes les plus récentes n'y figurent pas encore. La date de la vente la plus récente trouvée est affichée.
+- DVF ne donne ni l'état, ni l'étage, ni le DPE des biens vendus : ce sont vos **ajustements** qui en tiennent compte.
+- Aucun site d'annonces n'est consulté ni aspiré.
+
+**Variables facultatives** (à ne renseigner que si besoin, dans Vercel) :
+- `DVF_SOURCE=geodvf` : utiliser directement les fichiers d'Etalab (si l'API du Cerema est durablement indisponible) ;
+- `DVF_API_URL`, `GEODVF_URL`, `GEOCODING_API_URL`, `OSM_TILE_URL`, `NEXT_PUBLIC_OSM_TILE_URL` : adresses des services
+  (utiles uniquement pour les tests).
 
 ---
 
@@ -347,6 +386,8 @@ src/
     property.ts        titre d'un bien, alerte d'échéance du mandat
     matching.ts        libellés des critères de correspondance (le calcul est en SQL)
     suggestions.ts     relances suggérées (acquéreurs, mandats, retours de visite)
+    estimation.ts      calculs de l'estimation (distance, quartiles, ajustements, honoraires)
+    dvf/               lecture des ventes DVF : cerema.ts (source principale), geodvf.ts (repli), index.ts (choix)
   proxy.ts             protège les pages privées (redirige vers /connexion)
 supabase/
   migrations/          création des tables et des règles de sécurité (SQL)
