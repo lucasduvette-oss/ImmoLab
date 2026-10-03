@@ -26,6 +26,9 @@ export type AddressValue = {
   longitude: number | null;
 };
 
+/** Texte envoyé au géocodage : adresse, code postal et ville. */
+const queryOf = (address: string, postalCode: string, city: string) => [address, postalCode, city].filter(Boolean).join(" ").trim();
+
 /**
  * Champs « adresse / code postal / ville » avec suggestions d'adresses (géocodage IGN).
  * Choisir une suggestion renseigne aussi la position GPS (champs cachés latitude / longitude),
@@ -51,17 +54,17 @@ export function AddressAutocomplete({
   const [suggestions, setSuggestions] = useState<GeocodedAddress[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const skipNextSearch = useRef(true);
   // Incrémenté pour relancer la recherche de suggestions sans nouvelle frappe (adresse pré-remplie non localisée).
   const [lookupRequest, setLookupRequest] = useState(0);
+  // Dernière recherche traitée : l'adresse de départ et une suggestion choisie ne déclenchent pas de recherche
+  // (comparaison par valeur, qui reste juste même si React lance l'effet deux fois en développement).
+  const handled = useRef({ query: queryOf(initial?.address ?? "", initial?.postal_code ?? "", initial?.city ?? ""), request: 0 });
 
   // Recherche des suggestions 300 ms après la dernière frappe.
   useEffect(() => {
-    if (skipNextSearch.current) {
-      skipNextSearch.current = false;
-      return;
-    }
-    const q = [address, postalCode, city].filter(Boolean).join(" ").trim();
+    const q = queryOf(address, postalCode, city);
+    if (q === handled.current.query && lookupRequest === handled.current.request) return;
+    handled.current = { query: q, request: lookupRequest };
     if (address.trim().length < 4) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
@@ -84,7 +87,7 @@ export function AddressAutocomplete({
   }, [address, postalCode, city, lookupRequest]);
 
   function choose(s: GeocodedAddress) {
-    skipNextSearch.current = true;
+    handled.current = { query: queryOf(s.street || s.label, s.postalCode, s.city), request: lookupRequest };
     setAddress(s.street || s.label);
     setPostalCode(s.postalCode);
     setCity(s.city);
