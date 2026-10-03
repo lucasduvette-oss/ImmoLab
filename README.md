@@ -394,6 +394,37 @@ npx supabase db push                        # applique les migrations manquantes
 ```
 N'utilisez qu'**une seule** des deux méthodes (copier-coller *ou* ligne de commande) pour un même projet.
 
+### Tout sur votre ordinateur, sans compte Supabase
+
+Pour essayer l'application sans rien créer en ligne, Supabase peut tourner sur votre ordinateur
+(base de données, comptes et stockage des photos). Il faut en plus [Docker Desktop](https://www.docker.com/products/docker-desktop/),
+installé et **démarré**.
+
+1. Faites les étapes 1 et 2 ci-dessus (Node.js, Git, `git clone`, `npm install`).
+2. Démarrez Supabase en local (la première fois, le téléchargement prend plusieurs minutes) :
+   ```bash
+   npx supabase start
+   ```
+   Les 7 migrations sont appliquées automatiquement. À la fin, la commande affiche notamment l'**API URL**
+   (`http://127.0.0.1:54321`) et la **Publishable key** (ou « anon key » selon la version).
+   Vous pouvez les réafficher avec `npx supabase status`.
+3. Créez le fichier `.env.local` avec ces deux valeurs :
+   ```bash
+   NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=collez-ici-la-publishable-key
+   ```
+4. Lancez l'application : `npm run dev`, puis ouvrez <http://localhost:3000> et **créez un compte**
+   (en local, aucune confirmation par email n'est demandée).
+5. Données de démonstration : ouvrez le tableau de bord local <http://127.0.0.1:54323> → **SQL Editor**,
+   collez le contenu de `supabase/demo-data.sql`, remplacez `demo@exemple.fr` par l'email de votre compte, puis **Run**
+   (comme en [section 5](#5-données-de-démonstration)).
+6. Pour arrêter : `Ctrl + C` dans le terminal de l'application, puis `npx supabase stop`
+   (vos données sont conservées pour la prochaine fois).
+
+> En local, l'application n'est accessible que sur cet ordinateur. Pour l'utiliser sur votre téléphone
+> (et l'installer sur l'écran d'accueil), mettez-la en ligne (section 3) : l'installation exige une adresse en `https://`.
+> Les estimations DVF, le géocodage et les cartes utilisent les services publics en ligne : une connexion Internet reste nécessaire.
+
 ---
 
 ## 8. Sources de données et limites
